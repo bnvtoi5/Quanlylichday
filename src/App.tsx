@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Cloud, Loader2 } from 'lucide-react';
 import {
   AppState,
@@ -62,11 +62,12 @@ export default function App() {
   // Global Application State (Loaded clean without sample data)
   const [appState, setAppState] = useState<AppState>(() => loadAppState());
   const [isCloudLoading, setIsCloudLoading] = useState(true);
+  const isCloudInitializedRef = useRef(false);
 
   // Firebase Auth & Cloud Sync States
   const [user, setUser] = useState<User | null>(null);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('local_only');
-  const [syncMessage, setSyncMessage] = useState<string>('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const [syncMessage, setSyncMessage] = useState<string>('Đang đồng bộ đám mây...');
 
   // Cloud-First Initialization: Fetch live data from Firestore on every machine startup
   useEffect(() => {
@@ -86,11 +87,15 @@ export default function App() {
           setSyncStatus('synced');
           setSyncMessage('Đã đồng bộ đám mây (Tất cả máy đều thấy)');
         }
+        isCloudInitializedRef.current = true;
         setIsCloudLoading(false);
       })
       .catch((err) => {
         console.warn('Initial cloud sync error:', err);
-        if (isMounted) setIsCloudLoading(false);
+        if (isMounted) {
+          isCloudInitializedRef.current = true;
+          setIsCloudLoading(false);
+        }
       });
 
     return () => {
@@ -98,14 +103,10 @@ export default function App() {
     };
   }, []);
 
-  // Listen to Firebase Auth state
+  // Listen to Firebase Auth state (without downgrading sync status for anonymous/public cloud users)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) {
-        setSyncStatus('local_only');
-        setSyncMessage('Chế độ lưu máy cục bộ (Đăng nhập để đồng bộ thời gian thực)');
-      }
     });
     return () => unsubscribe();
   }, []);
@@ -197,7 +198,7 @@ export default function App() {
 
   // Debounced Cloud Push: Automatically saves edits to Cloud Firestore so all machines see them
   useEffect(() => {
-    if (!activeSemester) return;
+    if (!isCloudInitializedRef.current || !activeSemester) return;
     queueCloudSemesterSync(
       activeSemester,
       user,
@@ -211,6 +212,7 @@ export default function App() {
 
   // Sync Shared Catalogs
   useEffect(() => {
+    if (!isCloudInitializedRef.current) return;
     queueCloudCatalogSync(appState, user);
   }, [appState.masterSubjects, appState.masterClasses, appState.masterTeachers, appState.holidays, user]);
 
@@ -1452,10 +1454,12 @@ export default function App() {
     }
   };
 
-  // Auto-scan once on mount to detect existing classes with subgroups
+  // Auto-scan once on mount to detect existing classes with subgroups (only after cloud load)
   useEffect(() => {
-    handleAutoScanClassParents(true);
-  }, []);
+    if (!isCloudLoading && isCloudInitializedRef.current) {
+      handleAutoScanClassParents(true);
+    }
+  }, [isCloudLoading]);
 
   // ----------------------------------------------------
   // Snapshots & Backup Actions
