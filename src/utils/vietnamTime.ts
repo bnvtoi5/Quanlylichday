@@ -214,6 +214,28 @@ export function getVietnamNow(): Date {
   return new Date(utc + 3600000 * 7);
 }
 
+/**
+ * Lấy mã định danh chu kỳ 6:00 AM mỗi ngày theo giờ Việt Nam.
+ * Ví dụ:
+ * - Nếu thời gian VN hiện tại là 05/10/2026 05:45 AM -> chu kỳ là 2026-10-04_06:00
+ * - Nếu thời gian VN hiện tại là 05/10/2026 06:00 AM hoặc trễ hơn -> chu kỳ là 2026-10-05_06:00
+ */
+export function getVietnam6amCycleKey(vnDate: Date = getVietnamNow()): string {
+  const y = vnDate.getFullYear();
+  const m = String(vnDate.getMonth() + 1).padStart(2, '0');
+  const d = String(vnDate.getDate()).padStart(2, '0');
+  const hours = vnDate.getHours();
+
+  if (hours < 6) {
+    const prevDay = new Date(vnDate.getTime() - 24 * 3600 * 1000);
+    const py = prevDay.getFullYear();
+    const pm = String(prevDay.getMonth() + 1).padStart(2, '0');
+    const pd = String(prevDay.getDate()).padStart(2, '0');
+    return `${py}-${pm}-${pd}_06:00`;
+  }
+  return `${y}-${m}-${d}_06:00`;
+}
+
 export function formatVietnamDate(dateInput: Date | string): string {
   try {
     const d = typeof dateInput === 'string' ? parseDateString(dateInput) : dateInput;

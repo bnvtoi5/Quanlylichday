@@ -30,7 +30,7 @@ import {
 } from './utils/storage';
 import { exportTeachingReportToExcel } from './utils/excelExport';
 import { exportGanttPdfDirectly } from './utils/ganttPdfExport';
-import { calculateTeachingProgress } from './utils/vietnamTime';
+import { calculateTeachingProgress, getVietnam6amCycleKey } from './utils/vietnamTime';
 import { autoDetectAndAddParentClasses, ensureChildClassName } from './utils/classGrouping';
 
 import { Navbar } from './components/Navbar';
@@ -217,6 +217,93 @@ export default function App() {
     if (!isCloudInitializedRef.current) return;
     queueCloudCatalogSync(appState, user);
   }, [appState.masterSubjects, appState.masterClasses, appState.masterTeachers, appState.holidays, appState.uiSettings, user]);
+
+  // ----------------------------------------------------
+  // Automatic Daily 6:00 AM VN Schedule Recalculation Engine
+  // Automatically recalculates teaching hours & status for all courses each day at 6:00 AM Vietnam Time
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (isCloudLoading) return;
+
+    const performDaily6amCheckAndRecalculate = () => {
+      const current6amKey = getVietnam6amCycleKey();
+      const lastCalculatedKey = localStorage.getItem('edutrack_last_6am_calc_v1');
+
+      if (lastCalculatedKey !== current6amKey) {
+        setAppState((prevState) => {
+          let hasChanges = false;
+          const updatedSemesters = prevState.semesters.map((sem) => {
+            let semChanged = false;
+            const updatedTeachers = (sem.teachers || []).map((teacher) => {
+              const updatedCourses = (teacher.courses || []).map((course) => {
+                const totalHours = (course.theoryHours || 0) + (course.practiceHours || 0);
+                const courseStartDate = course.startDate || sem.startDate;
+
+                const autoProgress = calculateTeachingProgress(
+                  courseStartDate,
+                  course.scheduleSlots || [],
+                  course.hoursPerSession || 4,
+                  totalHours,
+                  prevState.holidays || [],
+                  course.pauseIntervals || [],
+                  course.schedulePhases || []
+                );
+
+                const newCompleted = autoProgress.calculatedHours;
+                const isDone = newCompleted >= totalHours && totalHours > 0;
+                const newStatus = (isDone ? 'Đã hoàn thành' : 'Đang dạy') as TeachingStatus;
+
+                if (course.completedHours !== newCompleted || course.status !== newStatus) {
+                  semChanged = true;
+                  hasChanges = true;
+                  return {
+                    ...course,
+                    completedHours: newCompleted,
+                    status: newStatus,
+                  };
+                }
+                return course;
+              });
+
+              return {
+                ...teacher,
+                courses: updatedCourses,
+              };
+            });
+
+            if (semChanged) {
+              return {
+                ...sem,
+                teachers: updatedTeachers,
+              };
+            }
+            return sem;
+          });
+
+          localStorage.setItem('edutrack_last_6am_calc_v1', current6amKey);
+
+          if (hasChanges) {
+            const nextState: AppState = {
+              ...prevState,
+              semesters: updatedSemesters,
+            };
+            saveAppState(nextState);
+            showToast('🌅 [6:00 AM Giờ VN] Đã tự động kích hoạt tính lại tiến độ giảng dạy ngày mới cho tất cả các môn!');
+            return nextState;
+          }
+
+          return prevState;
+        });
+      }
+    };
+
+    // Run on startup
+    performDaily6amCheckAndRecalculate();
+
+    // Check periodically every 30 seconds to catch 6:00 AM VN transition on the dot
+    const intervalId = setInterval(performDaily6amCheckAndRecalculate, 30000);
+    return () => clearInterval(intervalId);
+  }, [isCloudLoading]);
 
   // Manual Force Sync Handler: Pushes complete data immediately to Firestore
   const handleForceSync = async () => {
@@ -512,7 +599,8 @@ export default function App() {
             course.hoursPerSession || 4,
             totalHours,
             appState.holidays || [],
-            course.pauseIntervals || []
+            course.pauseIntervals || [],
+            course.schedulePhases || []
           );
 
           const newCompleted = autoProgress.calculatedHours;
