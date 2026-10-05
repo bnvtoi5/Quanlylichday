@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Cloud, Loader2 } from 'lucide-react';
 import {
   AppState,
+  AppUiSettings,
   CourseAssignment,
   Holiday,
   MasterClass,
@@ -173,7 +174,8 @@ export default function App() {
             (remoteCatalog.masterSubjects && JSON.stringify(prev.masterSubjects) !== JSON.stringify(remoteCatalog.masterSubjects)) ||
             (remoteCatalog.masterClasses && JSON.stringify(prev.masterClasses) !== JSON.stringify(remoteCatalog.masterClasses)) ||
             (remoteCatalog.masterTeachers && JSON.stringify(prev.masterTeachers) !== JSON.stringify(remoteCatalog.masterTeachers)) ||
-            (remoteCatalog.holidays && JSON.stringify(prev.holidays) !== JSON.stringify(remoteCatalog.holidays));
+            (remoteCatalog.holidays && JSON.stringify(prev.holidays) !== JSON.stringify(remoteCatalog.holidays)) ||
+            (remoteCatalog.uiSettings && JSON.stringify(prev.uiSettings) !== JSON.stringify(remoteCatalog.uiSettings));
 
           if (!isDiff) {
             return prev; // Return exact same reference: completely skips re-render!
@@ -210,11 +212,11 @@ export default function App() {
     );
   }, [activeSemester, user]);
 
-  // Sync Shared Catalogs
+  // Sync Shared Catalogs & UI Settings (Column widths, column visibility)
   useEffect(() => {
     if (!isCloudInitializedRef.current) return;
     queueCloudCatalogSync(appState, user);
-  }, [appState.masterSubjects, appState.masterClasses, appState.masterTeachers, appState.holidays, user]);
+  }, [appState.masterSubjects, appState.masterClasses, appState.masterTeachers, appState.holidays, appState.uiSettings, user]);
 
   // Manual Force Sync Handler: Pushes complete data immediately to Firestore
   const handleForceSync = async () => {
@@ -1499,8 +1501,30 @@ export default function App() {
   };
 
   const handleDownloadBackup = () => {
-    downloadJsonBackup(appState);
-    showToast('Đã tải xuống tệp sao lưu dữ liệu');
+    let latestUi = appState.uiSettings || {};
+    try {
+      const ganttVis = localStorage.getItem('edutrack_gantt_col_visibility_v3');
+      const ganttWidths = localStorage.getItem('edutrack_gantt_col_widths_v3');
+      const tableWidths = localStorage.getItem('edutrack_table_col_widths_v3');
+      const fitScreen = localStorage.getItem('edutrack_gantt_fit_to_screen_v1');
+      const weekRange = localStorage.getItem('edutrack_gantt_week_range_v1');
+      latestUi = {
+        ...latestUi,
+        ...(ganttVis ? { ganttColumnVisibility: JSON.parse(ganttVis) } : {}),
+        ...(ganttWidths ? { ganttColumnWidths: JSON.parse(ganttWidths) } : {}),
+        ...(tableWidths ? { tableColumnWidths: JSON.parse(tableWidths) } : {}),
+        ...(fitScreen !== null ? { ganttFitToScreen: fitScreen === 'true' } : {}),
+        ...(weekRange ? { ganttWeekRange: weekRange } : {}),
+      };
+    } catch {}
+
+    const fullStateToExport: AppState = {
+      ...appState,
+      uiSettings: latestUi,
+    };
+
+    downloadJsonBackup(fullStateToExport);
+    showToast('Đã tải xuống tệp sao lưu dữ liệu (kèm tùy chọn & độ rộng cột)');
   };
 
   const handleImportBackup = (imported: any) => {
@@ -1528,7 +1552,24 @@ export default function App() {
         masterTeachers: sanitizedTeachers,
         holidays: imported.holidays || INITIAL_HOLIDAYS,
         snapshots: imported.snapshots || [],
+        uiSettings: imported.uiSettings || undefined,
       };
+
+      if (imported.uiSettings?.ganttColumnVisibility) {
+        try { localStorage.setItem('edutrack_gantt_col_visibility_v3', JSON.stringify(imported.uiSettings.ganttColumnVisibility)); } catch {}
+      }
+      if (imported.uiSettings?.ganttColumnWidths) {
+        try { localStorage.setItem('edutrack_gantt_col_widths_v3', JSON.stringify(imported.uiSettings.ganttColumnWidths)); } catch {}
+      }
+      if (imported.uiSettings?.tableColumnWidths) {
+        try { localStorage.setItem('edutrack_table_col_widths_v3', JSON.stringify(imported.uiSettings.tableColumnWidths)); } catch {}
+      }
+      if (imported.uiSettings?.ganttFitToScreen !== undefined) {
+        try { localStorage.setItem('edutrack_gantt_fit_to_screen_v1', String(imported.uiSettings.ganttFitToScreen)); } catch {}
+      }
+      if (imported.uiSettings?.ganttWeekRange) {
+        try { localStorage.setItem('edutrack_gantt_week_range_v1', imported.uiSettings.ganttWeekRange); } catch {}
+      }
 
       setAppState(newAppState);
       saveAppState(newAppState);
@@ -1704,6 +1745,21 @@ export default function App() {
     }
   };
 
+  const handleUpdateUiSettings = (updates: Partial<AppUiSettings>) => {
+    setAppState((prev) => {
+      const nextUi = {
+        ...prev.uiSettings,
+        ...updates,
+      };
+      const nextState: AppState = {
+        ...prev,
+        uiSettings: nextUi,
+      };
+      saveAppState(nextState);
+      return nextState;
+    });
+  };
+
   if (isCloudLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white">
@@ -1786,6 +1842,8 @@ export default function App() {
             semester={activeSemester}
             holidays={appState.holidays || []}
             masterClasses={appState.masterClasses || []}
+            uiSettings={appState.uiSettings}
+            onUpdateUiSettings={handleUpdateUiSettings}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
             selectedPosition={selectedPosition}
@@ -1863,6 +1921,8 @@ export default function App() {
               holidays={appState.holidays || []}
               selectedCourseIds={selectedCourseIds}
               isAllFilteredSelected={isAllFilteredSelected}
+              uiSettings={appState.uiSettings}
+              onUpdateUiSettings={handleUpdateUiSettings}
               onToggleSelectAllFiltered={handleToggleSelectAllFiltered}
               onToggleSelectCourse={handleToggleSelectCourse}
               onToggleSelectTeacher={handleToggleSelectTeacher}

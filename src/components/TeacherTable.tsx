@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -12,7 +12,7 @@ import {
   Trash2,
   Zap
 } from 'lucide-react';
-import { CourseAssignment, CustomColumn, Holiday, Teacher, TeachingStatus } from '../types';
+import { AppUiSettings, CourseAssignment, CustomColumn, Holiday, Teacher, TeachingStatus } from '../types';
 import { calculateTeachingProgress } from '../utils/vietnamTime';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -22,6 +22,8 @@ interface TeacherTableProps {
   holidays?: Holiday[];
   selectedCourseIds: string[];
   isAllFilteredSelected?: boolean;
+  uiSettings?: AppUiSettings;
+  onUpdateUiSettings?: (settings: Partial<AppUiSettings>) => void;
   onToggleSelectAllFiltered?: () => void;
   onToggleSelectCourse: (courseId: string) => void;
   onToggleSelectTeacher: (teacherId: string) => void;
@@ -59,6 +61,8 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
   holidays = [],
   selectedCourseIds,
   isAllFilteredSelected = false,
+  uiSettings,
+  onUpdateUiSettings,
   onToggleSelectAllFiltered,
   onToggleSelectCourse,
   onToggleSelectTeacher,
@@ -75,8 +79,11 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
   onOpenAddTeacher,
   onAutoCalculateAll,
 }) => {
-  // Column resizing state (saved to localStorage)
+  // Column resizing state (saved to Cloud & localStorage)
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    if (uiSettings?.tableColumnWidths) {
+      return { ...DEFAULT_COLUMN_WIDTHS, ...uiSettings.tableColumnWidths };
+    }
     try {
       const saved = localStorage.getItem('edutrack_table_col_widths_v3');
       return saved ? JSON.parse(saved) : DEFAULT_COLUMN_WIDTHS;
@@ -85,9 +92,33 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
     }
   });
 
+  useEffect(() => {
+    if (uiSettings?.tableColumnWidths) {
+      setColumnWidths((prev) => {
+        const isSame = Object.keys(uiSettings.tableColumnWidths!).every(
+          (k) => uiSettings.tableColumnWidths![k] === prev[k]
+        );
+        return isSame ? prev : { ...prev, ...uiSettings.tableColumnWidths };
+      });
+    }
+  }, [uiSettings?.tableColumnWidths]);
+
+  const syncTableWidthsDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifyTableWidthsChange = (widths: Record<string, number>) => {
+    if (syncTableWidthsDebounce.current) {
+      clearTimeout(syncTableWidthsDebounce.current);
+    }
+    syncTableWidthsDebounce.current = setTimeout(() => {
+      onUpdateUiSettings?.({ tableColumnWidths: widths });
+    }, 500);
+  };
+
   const handleResetWidths = () => {
     setColumnWidths(DEFAULT_COLUMN_WIDTHS);
-    localStorage.removeItem('edutrack_table_col_widths_v3');
+    try {
+      localStorage.removeItem('edutrack_table_col_widths_v3');
+    } catch {}
+    notifyTableWidthsChange(DEFAULT_COLUMN_WIDTHS);
   };
 
   // Mouse Drag Column Resizing
@@ -111,6 +142,7 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
         try {
           localStorage.setItem('edutrack_table_col_widths_v3', JSON.stringify(latest));
         } catch {}
+        notifyTableWidthsChange(latest);
         return latest;
       });
       window.removeEventListener('mousemove', handleMouseMove);

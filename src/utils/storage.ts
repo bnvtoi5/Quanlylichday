@@ -1265,6 +1265,7 @@ export function loadAppState(): AppState {
       masterTeachers: sanitizedMasterTeachers,
       holidays: parsed.holidays || INITIAL_STATE.holidays || [],
       snapshots: parsed.snapshots || [],
+      uiSettings: parsed.uiSettings || undefined,
     };
   } catch (error) {
     console.error('Error loading app state from storage:', error);

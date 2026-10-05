@@ -53,6 +53,7 @@ export async function fetchInitialCloudState(): Promise<AppState | null> {
       masterTeachers: catData.masterTeachers || [],
       holidays: catData.holidays || [],
       snapshots: [],
+      uiSettings: catData.uiSettings || undefined,
     };
   } catch (err) {
     console.warn('Could not fetch initial cloud state (offline?):', err);
@@ -159,7 +160,7 @@ export function subscribeToCloudSemester(
       }
     );
 
-    // 2. Master Catalog listener: Shared subjects, classes, teachers, holidays
+    // 2. Master Catalog listener: Shared subjects, classes, teachers, holidays, uiSettings
     unsubscribeCatalog = onSnapshot(
       catalogDocRef,
       (snapshot) => {
@@ -170,6 +171,7 @@ export function subscribeToCloudSemester(
           c: data.masterClasses || [],
           t: data.masterTeachers || [],
           h: data.holidays || [],
+          u: data.uiSettings || {},
         });
 
         // Loop prevention: ignore if we just wrote this or already received it
@@ -184,6 +186,7 @@ export function subscribeToCloudSemester(
           masterClasses: data.masterClasses || [],
           masterTeachers: data.masterTeachers || [],
           holidays: data.holidays || [],
+          uiSettings: data.uiSettings || undefined,
         });
       },
       (error) => {
@@ -282,6 +285,7 @@ export function queueCloudCatalogSync(
     c: state.masterClasses || [],
     t: state.masterTeachers || [],
     h: state.holidays || [],
+    u: state.uiSettings || {},
   });
 
   // Loop prevention: avoid write if unchanged from what we wrote or remote just pushed
@@ -310,6 +314,7 @@ export function queueCloudCatalogSync(
           masterClasses: state.masterClasses || [],
           masterTeachers: state.masterTeachers || [],
           holidays: state.holidays || [],
+          uiSettings: state.uiSettings || {},
           updatedAt: new Date().toISOString(),
           updatedBy: user?.uid || 'web-client',
         },
@@ -322,7 +327,7 @@ export function queueCloudCatalogSync(
 }
 
 /**
- * Explicitly publishes full database state (active semester + all semesters + catalog)
+ * Explicitly publishes full database state (active semester + all semesters + catalog + uiSettings)
  * to Firestore immediately. Used when user uploads a JSON backup or clicks sync.
  */
 export async function publishFullStateToCloud(
@@ -360,6 +365,7 @@ export async function publishFullStateToCloud(
         masterClasses: state.masterClasses || [],
         masterTeachers: state.masterTeachers || [],
         holidays: state.holidays || [],
+        uiSettings: state.uiSettings || {},
         updatedAt: new Date().toISOString(),
         updatedBy: user?.uid || 'web-sync',
       },

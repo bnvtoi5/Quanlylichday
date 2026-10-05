@@ -142,6 +142,14 @@ export interface SnapshotBackup {
   data: Semester;
 }
 
+export interface AppUiSettings {
+  ganttColumnWidths?: Record<string, number>;
+  ganttColumnVisibility?: Record<string, boolean>;
+  ganttFitToScreen?: boolean;
+  ganttWeekRange?: string;
+  tableColumnWidths?: Record<string, number>;
+}
+
 export interface AppState {
   semesters: Semester[];
   activeSemesterId: string;
@@ -150,4 +158,5 @@ export interface AppState {
   masterTeachers: MasterTeacher[];
   holidays: Holiday[]; // Danh sách các ngày lễ / ngày nghỉ
   snapshots: SnapshotBackup[];
+  uiSettings?: AppUiSettings; // Tùy chọn hiển thị cột & độ rộng cột đồng bộ mọi máy
 }

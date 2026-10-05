@@ -28,7 +28,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { CourseAssignment, CoursePauseInterval, Holiday, MasterClass, Semester, Teacher } from '../types';
+import { AppUiSettings, CourseAssignment, CoursePauseInterval, Holiday, MasterClass, Semester, Teacher } from '../types';
 import {
   computeCourseGanttSchedule,
   CourseGanttSchedule,
@@ -44,6 +44,7 @@ import { GanttPrintView } from './GanttPrintView';
 import { GanttQuickSchedulePopover } from './GanttQuickSchedulePopover';
 
 export interface GanttColumnVisibility {
+  [key: string]: boolean;
   stt: boolean;
   teacher: boolean;
   position: boolean;
@@ -56,6 +57,7 @@ export interface GanttColumnVisibility {
 }
 
 export interface GanttColumnWidths {
+  [key: string]: number;
   stt: number;
   teacher: number;
   position: number;
@@ -106,6 +108,8 @@ interface GanttChartProps {
   onUpdateCourse?: (teacherId: string, courseId: string, updates: Partial<CourseAssignment>) => void;
   onUpdateTeachers?: (updatedTeachers: Teacher[], message?: string) => void;
   onToast?: (msg: string) => void;
+  uiSettings?: AppUiSettings;
+  onUpdateUiSettings?: (settings: Partial<AppUiSettings>) => void;
   // Shared search & filter props with parent
   searchTerm?: string;
   onSearchChange?: (val: string) => void;
@@ -142,6 +146,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   onUpdateCourse,
   onUpdateTeachers,
   onToast,
+  uiSettings,
+  onUpdateUiSettings,
   searchTerm: parentSearchTerm,
   onSearchChange: parentOnSearchChange,
   selectedPosition: parentSelectedPosition,
@@ -281,8 +287,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  // Column Visibility & Widths State with localStorage Persistence
+  // Column Visibility & Widths State with Cloud & localStorage Persistence
   const [colVisibility, setColVisibility] = useState<GanttColumnVisibility>(() => {
+    if (uiSettings?.ganttColumnVisibility) {
+      return { ...DEFAULT_VISIBILITY, ...uiSettings.ganttColumnVisibility };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_VISIBILITY);
       if (saved) return { ...DEFAULT_VISIBILITY, ...JSON.parse(saved) };
@@ -291,6 +300,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   });
 
   const [colWidths, setColWidths] = useState<GanttColumnWidths>(() => {
+    if (uiSettings?.ganttColumnWidths) {
+      return { ...DEFAULT_WIDTHS, ...uiSettings.ganttColumnWidths };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_WIDTHS);
       if (saved) return { ...DEFAULT_WIDTHS, ...JSON.parse(saved) };
@@ -298,18 +310,72 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return DEFAULT_WIDTHS;
   });
 
-  // Save changes to localStorage
+  // Sync incoming Cloud uiSettings when received from another device
+  useEffect(() => {
+    if (!uiSettings) return;
+
+    if (uiSettings.ganttColumnVisibility) {
+      setColVisibility((prev) => {
+        const isSame = Object.keys(uiSettings.ganttColumnVisibility!).every(
+          (k) => (uiSettings.ganttColumnVisibility as any)[k] === (prev as any)[k]
+        );
+        return isSame ? prev : { ...prev, ...uiSettings.ganttColumnVisibility };
+      });
+    }
+    if (uiSettings.ganttColumnWidths) {
+      setColWidths((prev) => {
+        const isSame = Object.keys(uiSettings.ganttColumnWidths!).every(
+          (k) => (uiSettings.ganttColumnWidths as any)[k] === (prev as any)[k]
+        );
+        return isSame ? prev : { ...prev, ...uiSettings.ganttColumnWidths };
+      });
+    }
+    if (uiSettings.ganttFitToScreen !== undefined) {
+      setIsFitToScreen((prev) => (prev === uiSettings.ganttFitToScreen ? prev : uiSettings.ganttFitToScreen!));
+    }
+    if (uiSettings.ganttWeekRange) {
+      setWeekRangeFilter((prev) => (prev === uiSettings.ganttWeekRange ? prev : (uiSettings.ganttWeekRange as any)));
+    }
+  }, [uiSettings]);
+
+  const syncSettingsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifyUiSettingsChange = (partial: Partial<AppUiSettings>) => {
+    if (syncSettingsDebounceRef.current) {
+      clearTimeout(syncSettingsDebounceRef.current);
+    }
+    syncSettingsDebounceRef.current = setTimeout(() => {
+      onUpdateUiSettings?.(partial);
+    }, 400);
+  };
+
+  // Save changes to localStorage and push to Cloud uiSettings
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_VISIBILITY, JSON.stringify(colVisibility));
     } catch {}
+    notifyUiSettingsChange({ ganttColumnVisibility: colVisibility });
   }, [colVisibility]);
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_WIDTHS, JSON.stringify(colWidths));
     } catch {}
+    notifyUiSettingsChange({ ganttColumnWidths: colWidths });
   }, [colWidths]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_FIT_TO_SCREEN, String(isFitToScreen));
+    } catch {}
+    notifyUiSettingsChange({ ganttFitToScreen: isFitToScreen });
+  }, [isFitToScreen]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_WEEK_RANGE, weekRangeFilter);
+    } catch {}
+    notifyUiSettingsChange({ ganttWeekRange: weekRangeFilter });
+  }, [weekRangeFilter]);
 
   // Dropdown states
   const [isColumnDropdownOpen, setIsColumnDropdownOpen] = useState(false);
@@ -340,6 +406,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       localStorage.removeItem(STORAGE_KEY_FIT_TO_SCREEN);
       localStorage.removeItem(STORAGE_KEY_WEEK_RANGE);
     } catch {}
+    notifyUiSettingsChange({
+      ganttColumnVisibility: DEFAULT_VISIBILITY,
+      ganttColumnWidths: DEFAULT_WIDTHS,
+      ganttFitToScreen: false,
+      ganttWeekRange: 'ALL',
+    });
   };
 
   // Toggle single column
