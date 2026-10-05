@@ -63,22 +63,15 @@ export const CloudSyncIndicator: React.FC<CloudSyncIndicatorProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border shadow-2xs ${
-          !user
-            ? 'bg-slate-800 text-sky-300 border-sky-500/40 hover:bg-slate-700'
-            : syncStatus === 'syncing'
+          syncStatus === 'syncing'
             ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
             : syncStatus === 'synced'
             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
             : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
         }`}
-        title="Trạng thái đồng bộ đám mây Firebase & Phân quyền"
+        title="Trạng thái đồng bộ đám mây Firebase (Mọi máy dùng chung)"
       >
-        {!user ? (
-          <>
-            <Eye className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">Chế độ xem</span>
-          </>
-        ) : syncStatus === 'syncing' ? (
+        {syncStatus === 'syncing' ? (
           <>
             <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
             <span className="hidden sm:inline">Đang lưu...</span>
@@ -86,7 +79,7 @@ export const CloudSyncIndicator: React.FC<CloudSyncIndicatorProps> = ({
         ) : syncStatus === 'synced' ? (
           <>
             <CloudCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Đã đồng bộ mây</span>
+            <span className="hidden sm:inline">Đã đồng bộ mây (Mọi máy)</span>
           </>
         ) : (
           <>
@@ -102,7 +95,7 @@ export const CloudSyncIndicator: React.FC<CloudSyncIndicatorProps> = ({
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-emerald-400" />
-              <span className="font-bold text-sm">Đồng Bộ & Chia Sẻ Mây</span>
+              <span className="font-bold text-sm">Đồng Bộ Mây Dùng Chung</span>
             </div>
             <button
               onClick={() => setIsOpen(false)}
@@ -112,102 +105,72 @@ export const CloudSyncIndicator: React.FC<CloudSyncIndicatorProps> = ({
             </button>
           </div>
 
-          {/* User Profile Area */}
-          <div className="py-3">
+          {/* Sync Status Info */}
+          <div className="py-3 space-y-3">
+            <div className="p-2.5 bg-slate-800/80 rounded-lg border border-slate-700/60 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 text-[11px]">Trạng thái mây:</span>
+                <span
+                  className={`font-bold flex items-center gap-1 text-[11px] ${
+                    syncStatus === 'synced'
+                      ? 'text-emerald-400'
+                      : syncStatus === 'syncing'
+                      ? 'text-amber-400'
+                      : 'text-rose-400'
+                  }`}
+                >
+                  {syncStatus === 'synced' && '● Đã kết nối & Đồng bộ thời gian thực'}
+                  {syncStatus === 'syncing' && '● Đang lưu lên đám mây...'}
+                  {syncStatus === 'error' && '● Lỗi kết nối đám mây'}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300">
+                {statusMessage || 'Mọi thay đổi trên máy tính này sẽ tự động cập nhật đến tất cả các máy khác mở web.'}
+              </p>
+            </div>
+
+            {/* Quick Force Sync Button */}
+            {onForceSync && (
+              <button
+                onClick={() => {
+                  onForceSync();
+                  setIsOpen(false);
+                }}
+                className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Đồng bộ ngay dữ liệu này cho mọi máy</span>
+              </button>
+            )}
+
+            {/* User Profile / Login Area */}
             {user ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2.5">
-                  {user.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.displayName || 'User'}
-                      className="w-8 h-8 rounded-full border border-emerald-500/40"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs">
-                      {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-xs truncate text-slate-100 flex items-center gap-1.5">
-                      <span>{user.displayName || 'Cộng tác viên'}</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-600/50">
-                        Chỉnh sửa
-                      </span>
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-[10px]">
+                    {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
                   </div>
+                  <span className="text-xs text-slate-300 truncate max-w-[150px]">
+                    {user.displayName || user.email}
+                  </span>
                 </div>
-
-                {/* Sync status card */}
-                <div className="p-2.5 bg-slate-800/80 rounded-lg border border-slate-700/60 text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[11px]">Trạng thái:</span>
-                    <span
-                      className={`font-bold flex items-center gap-1 text-[11px] ${
-                        syncStatus === 'synced'
-                          ? 'text-emerald-400'
-                          : syncStatus === 'syncing'
-                          ? 'text-amber-400'
-                          : 'text-rose-400'
-                      }`}
-                    >
-                      {syncStatus === 'synced' && '● Đang đồng bộ thời gian thực'}
-                      {syncStatus === 'syncing' && '● Đang lưu lên đám mây...'}
-                      {syncStatus === 'error' && '● Lỗi đồng bộ'}
-                    </span>
-                  </div>
-                  {statusMessage && (
-                    <p className="text-[10px] text-slate-400 italic">{statusMessage}</p>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-1">
-                  {onForceSync && (
-                    <button
-                      onClick={() => {
-                        onForceSync();
-                        onToast('Đang tiến hành đồng bộ dữ liệu ngay lập tức...');
-                      }}
-                      className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <RefreshCw className="w-3 h-3 text-emerald-400" />
-                      <span>Đồng bộ ngay</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={handleLogout}
-                    className="py-1.5 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold rounded-lg border border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <LogOut className="w-3 h-3" />
-                    <span>Đăng xuất</span>
-                  </button>
-                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-rose-400 hover:text-rose-300 cursor-pointer flex items-center gap-1"
+                >
+                  <LogOut className="w-3 h-3" />
+                  <span>Đăng xuất</span>
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="p-2.5 bg-sky-950/40 border border-sky-800/50 rounded-lg text-xs space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-sky-300 font-bold text-[11px]">
-                    <Users className="w-3.5 h-3.5" />
-                    <span>Dành cho người xem / Đồng nghiệp:</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Bạn đang ở <strong>Chế độ xem trực tuyến</strong> (được tải trực tiếp từ cơ sở dữ liệu mây).
-                  </p>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Để được <strong>quyền thêm sửa dữ liệu, phân công giảng dạy và lưu lên mây</strong>, hãy đăng nhập bằng tài khoản Google.
-                  </p>
-                </div>
-
+              <div className="pt-2 border-t border-slate-800">
                 <button
                   onClick={handleLogin}
                   disabled={isLoggingIn}
-                  className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{isLoggingIn ? 'Đang mở đăng nhập...' : 'Đăng nhập Google để chỉnh sửa'}</span>
+                  <LogIn className="w-3 h-3 text-sky-400" />
+                  <span>{isLoggingIn ? 'Đang mở đăng nhập...' : 'Đăng nhập Google (Tùy chọn)'}</span>
                 </button>
               </div>
             )}

@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { Cloud, Loader2 } from 'lucide-react';
 import {
   AppState,
   CourseAssignment,
@@ -50,6 +51,8 @@ import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import {
   SyncStatus,
+  fetchInitialCloudState,
+  publishFullStateToCloud,
   queueCloudCatalogSync,
   queueCloudSemesterSync,
   subscribeToCloudSemester,
@@ -58,11 +61,42 @@ import {
 export default function App() {
   // Global Application State (Loaded clean without sample data)
   const [appState, setAppState] = useState<AppState>(() => loadAppState());
+  const [isCloudLoading, setIsCloudLoading] = useState(true);
 
   // Firebase Auth & Cloud Sync States
   const [user, setUser] = useState<User | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('local_only');
   const [syncMessage, setSyncMessage] = useState<string>('');
+
+  // Cloud-First Initialization: Fetch live data from Firestore on every machine startup
+  useEffect(() => {
+    let isMounted = true;
+    fetchInitialCloudState()
+      .then((cloudState) => {
+        if (!isMounted) return;
+        if (cloudState && cloudState.semesters && cloudState.semesters.length > 0) {
+          setAppState((prev) => {
+            const mergedState: AppState = {
+              ...cloudState,
+              snapshots: prev.snapshots || [],
+            };
+            saveAppState(mergedState);
+            return mergedState;
+          });
+          setSyncStatus('synced');
+          setSyncMessage('Đã đồng bộ đám mây (Tất cả máy đều thấy)');
+        }
+        setIsCloudLoading(false);
+      })
+      .catch((err) => {
+        console.warn('Initial cloud sync error:', err);
+        if (isMounted) setIsCloudLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Listen to Firebase Auth state
   useEffect(() => {
@@ -87,7 +121,7 @@ export default function App() {
     return found || appState.semesters[0] || INITIAL_STATE.semesters[0];
   }, [appState.semesters, appState.activeSemesterId]);
 
-  // Realtime Cloud Listener: Only 1 read on load, 0 reads during listening
+  // Realtime Cloud Listener: Anyone opening on any machine gets live cloud data
   useEffect(() => {
     if (!activeSemester?.id) return;
 
@@ -96,16 +130,61 @@ export default function App() {
       user,
       (remoteSemester) => {
         const sanitized = sanitizeSemester(remoteSemester);
-        setAppState((prev) => ({
-          ...prev,
-          semesters: prev.semesters.map((s) => (s.id === sanitized.id ? sanitized : s)),
-        }));
+        setAppState((prev) => {
+          const current = prev.semesters.find((s) => s.id === sanitized.id);
+          if (current) {
+            const curSig = JSON.stringify({
+              id: current.id,
+              name: current.name,
+              teachers: current.teachers,
+              customColumns: current.customColumns,
+              startDate: current.startDate,
+              endDate: current.endDate,
+            });
+            const remSig = JSON.stringify({
+              id: sanitized.id,
+              name: sanitized.name,
+              teachers: sanitized.teachers,
+              customColumns: sanitized.customColumns,
+              startDate: sanitized.startDate,
+              endDate: sanitized.endDate,
+            });
+            if (curSig === remSig) {
+              return prev; // Return exact same reference: completely skips re-render!
+            }
+          }
+
+          const exists = prev.semesters.some((s) => s.id === sanitized.id);
+          const updatedSemesters = exists
+            ? prev.semesters.map((s) => (s.id === sanitized.id ? sanitized : s))
+            : [sanitized, ...prev.semesters];
+          const nextState = {
+            ...prev,
+            semesters: updatedSemesters,
+          };
+          saveAppState(nextState);
+          return nextState;
+        });
       },
       (remoteCatalog) => {
-        setAppState((prev) => ({
-          ...prev,
-          ...remoteCatalog,
-        }));
+        setAppState((prev) => {
+          const isDiff =
+            (remoteCatalog.masterSubjects && JSON.stringify(prev.masterSubjects) !== JSON.stringify(remoteCatalog.masterSubjects)) ||
+            (remoteCatalog.masterClasses && JSON.stringify(prev.masterClasses) !== JSON.stringify(remoteCatalog.masterClasses)) ||
+            (remoteCatalog.masterTeachers && JSON.stringify(prev.masterTeachers) !== JSON.stringify(remoteCatalog.masterTeachers)) ||
+            (remoteCatalog.holidays && JSON.stringify(prev.holidays) !== JSON.stringify(remoteCatalog.holidays));
+
+          if (!isDiff) {
+            return prev; // Return exact same reference: completely skips re-render!
+          }
+
+          const nextState = {
+            ...prev,
+            ...remoteCatalog,
+          };
+          saveAppState(nextState);
+          return nextState;
+        });
       },
       (status, msg) => {
         setSyncStatus(status);
@@ -116,9 +195,9 @@ export default function App() {
     return () => unsubscribe();
   }, [user, activeSemester?.id]);
 
-  // Debounced Cloud Push: Combines rapid edits into 1 write
+  // Debounced Cloud Push: Automatically saves edits to Cloud Firestore so all machines see them
   useEffect(() => {
-    if (!user || !activeSemester) return;
+    if (!activeSemester) return;
     queueCloudSemesterSync(
       activeSemester,
       user,
@@ -132,33 +211,20 @@ export default function App() {
 
   // Sync Shared Catalogs
   useEffect(() => {
-    if (!user) return;
-    queueCloudCatalogSync(appState, user, (status, msg) => {
-      setSyncStatus(status);
-      if (msg) setSyncMessage(msg);
-    });
+    queueCloudCatalogSync(appState, user);
   }, [appState.masterSubjects, appState.masterClasses, appState.masterTeachers, appState.holidays, user]);
 
-  // Manual Force Sync Handler
-  const handleForceSync = () => {
-    if (!user) {
-      showToast('Vui lòng đăng nhập Google để đồng bộ lên mây!');
-      return;
+  // Manual Force Sync Handler: Pushes complete data immediately to Firestore
+  const handleForceSync = async () => {
+    showToast('⚡ Đang đồng bộ toàn bộ dữ liệu lên đám mây...');
+    const ok = await publishFullStateToCloud(appState, user);
+    if (ok) {
+      setSyncStatus('synced');
+      setSyncMessage('Đã đồng bộ đám mây (Tất cả máy đều thấy)');
+      showToast('✅ Đã đồng bộ thành công! Mọi máy mở web đều sẽ thấy dữ liệu này.');
+    } else {
+      showToast('❌ Có lỗi khi đồng bộ lên đám mây. Vui lòng kiểm tra lại kết nối mạng.');
     }
-    queueCloudSemesterSync(
-      activeSemester,
-      user,
-      (status, msg) => {
-        setSyncStatus(status);
-        if (msg) setSyncMessage(msg);
-      },
-      0
-    );
-    queueCloudCatalogSync(appState, user, (status, msg) => {
-      setSyncStatus(status);
-      if (msg) setSyncMessage(msg);
-    });
-    showToast('⚡ Đã gửi yêu cầu đồng bộ tức thì lên đám mây Firebase!');
   };
 
   // View Mode: 'classes' (Phân Công Theo Lớp), 'table' (Bảng Báo Cáo), 'gantt' (Tiến Độ Tuần Gantt Chart), 'catalog' (Quản Lý GV, Môn và Lớp), 'overview' (Tổng Quan Học Kỳ)
@@ -1433,12 +1499,49 @@ export default function App() {
     showToast('Đã tải xuống tệp sao lưu dữ liệu');
   };
 
-  const handleImportBackup = (imported: AppState) => {
-    setAppState({
-      ...imported,
-      holidays: imported.holidays || INITIAL_HOLIDAYS,
-    });
-    showToast('Đã khôi phục toàn bộ hệ thống từ tệp sao lưu!');
+  const handleImportBackup = (imported: any) => {
+    try {
+      if (!imported || !imported.semesters || !Array.isArray(imported.semesters) || imported.semesters.length === 0) {
+        showToast('Tệp sao lưu không hợp lệ hoặc không có dữ liệu học kỳ.');
+        return;
+      }
+      const sanitizedSemesters = imported.semesters.map(sanitizeSemester);
+      const activeId =
+        imported.activeSemesterId && sanitizedSemesters.some((s: Semester) => s.id === imported.activeSemesterId)
+          ? imported.activeSemesterId
+          : sanitizedSemesters[0].id;
+
+      const sanitizedTeachers = (imported.masterTeachers || []).map((mt: any) => ({
+        ...mt,
+        position: normalizeTeacherPosition(mt.position),
+      }));
+
+      const newAppState: AppState = {
+        semesters: sanitizedSemesters,
+        activeSemesterId: activeId,
+        masterSubjects: imported.masterSubjects || [],
+        masterClasses: imported.masterClasses || [],
+        masterTeachers: sanitizedTeachers,
+        holidays: imported.holidays || INITIAL_HOLIDAYS,
+        snapshots: imported.snapshots || [],
+      };
+
+      setAppState(newAppState);
+      saveAppState(newAppState);
+      showToast('Đang đồng bộ dữ liệu vừa nạp lên đám mây cho tất cả các máy...');
+      publishFullStateToCloud(newAppState, user).then((ok) => {
+        if (ok) {
+          setSyncStatus('synced');
+          setSyncMessage('Đã đồng bộ đám mây (Tất cả máy đều thấy)');
+          showToast('🚀 Đã khôi phục & ĐỒNG BỘ MÂY thành công! Mọi máy khác mở web đều thấy ngay.');
+        } else {
+          showToast('Đã khôi phục cục bộ. (Vui lòng bấm Đồng bộ mây khi có mạng)');
+        }
+      });
+    } catch (err) {
+      console.error('Import backup error:', err);
+      showToast('Có lỗi xảy ra khi nạp tệp sao lưu.');
+    }
   };
 
   const handleResetToCleanSlate = () => {
@@ -1596,6 +1699,26 @@ export default function App() {
       showToast('Lỗi khi xuất hàng loạt. Vui lòng thử lại.');
     }
   };
+
+  if (isCloudLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white">
+        <div className="flex flex-col items-center space-y-4 max-w-sm text-center animate-in fade-in zoom-in-95">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shadow-xl">
+            <Cloud className="w-8 h-8 text-emerald-400 animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-100">Đang tải dữ liệu từ máy chủ đám mây...</h2>
+            <p className="text-xs text-slate-400 mt-1">Đồng bộ phiên bản mới nhất dùng chung cho tất cả các máy tính</p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-emerald-300 bg-slate-800/80 px-3.5 py-1.5 rounded-full border border-slate-700/60 shadow-inner">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+            <span>Đang nạp dữ liệu giảng dạy...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
@@ -1853,6 +1976,7 @@ export default function App() {
         onDownloadJsonBackup={handleDownloadBackup}
         onImportJsonBackup={handleImportBackup}
         onResetToCleanSlate={handleResetToCleanSlate}
+        onForceSyncCloud={handleForceSync}
       />
 
       {/* App-Wide Confirm Modal (Replaces blocked window.confirm) */}

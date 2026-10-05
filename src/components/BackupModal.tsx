@@ -24,6 +24,7 @@ interface BackupModalProps {
   onDownloadJsonBackup: () => void;
   onImportJsonBackup: (importedData: any) => void;
   onResetToCleanSlate: () => void;
+  onForceSyncCloud?: () => void;
 }
 
 export const BackupModal: React.FC<BackupModalProps> = ({
@@ -37,6 +38,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   onDownloadJsonBackup,
   onImportJsonBackup,
   onResetToCleanSlate,
+  onForceSyncCloud,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -198,6 +200,32 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Cloud Sync All Machines Section */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+            <div className="space-y-1 text-center sm:text-left">
+              <span className="font-bold text-emerald-950 text-xs flex items-center justify-center sm:justify-start gap-1.5">
+                <span>☁️ Đồng bộ đám mây cho tất cả máy</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-semibold">
+                  Tự động & Không cần đăng nhập
+                </span>
+              </span>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Dữ liệu được chia sẻ trực tiếp qua máy chủ. Khi bạn chỉnh sửa hoặc nạp file JSON, hệ thống sẽ tự động đồng bộ ngay để <strong>tất cả các máy khác mở web đều thấy chung dữ liệu</strong>.
+              </p>
+            </div>
+            {onForceSyncCloud && (
+              <button
+                onClick={() => {
+                  onForceSyncCloud();
+                  onClose();
+                }}
+                className="w-full sm:w-auto px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs shadow-xs shrink-0 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <span>⚡ Đồng bộ lên Cloud ngay</span>
+              </button>
+            )}
           </div>
 
           {/* Export & Import File Section */}
