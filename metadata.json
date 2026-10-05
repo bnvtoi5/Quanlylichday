@@ -1,0 +1,6 @@
+{
+  "name": "EduTrack - Quản lý & Báo cáo Giảng dạy",
+  "description": "Ứng dụng quản lý, theo dõi tiến độ giảng dạy của giảng viên, phân công môn học theo học kỳ và xuất báo cáo Excel chuẩn chỉ phục vụ họp khoa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

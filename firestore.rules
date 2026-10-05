@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidSemester(data) {
+      return data.id is string &&
+        data.id.size() <= 128 &&
+        data.name is string &&
+        data.name.size() > 0 &&
+        data.name.size() <= 200 &&
+        data.startDate is string &&
+        data.startDate.size() <= 50 &&
+        data.endDate is string &&
+        data.endDate.size() <= 50;
+    }
+
+    function isValidCatalog(data) {
+      return data.id is string &&
+        data.id.size() <= 128;
+    }
+
+    function isValidUserProfile(data) {
+      return data.id is string &&
+        data.id == request.auth.uid &&
+        data.email is string &&
+        data.email.size() <= 200;
+    }
+
+    // Semesters collection: Public read so anyone with the link can view; write requires login
+    match /semesters/{semesterId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(semesterId) && isValidSemester(incoming());
+      allow update: if isSignedIn() && isValidId(semesterId) && isValidSemester(incoming());
+      allow delete: if isSignedIn() && isValidId(semesterId);
+    }
+
+    // Catalogs collection: Public read; write requires login
+    match /catalogs/{catalogId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(catalogId) && isValidCatalog(incoming());
+      allow update: if isSignedIn() && isValidId(catalogId) && isValidCatalog(incoming());
+      allow delete: if isSignedIn() && isValidId(catalogId);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow create, update: if isSignedIn() && isValidId(userId) && request.auth.uid == userId && isValidUserProfile(incoming());
+    }
+  }
+}

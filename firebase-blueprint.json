@@ -1,0 +1,142 @@
+{
+  "entities": {
+    "SemesterWorkspace": {
+      "title": "SemesterWorkspace",
+      "description": "Represents a semester and all of its teaching assignments, schedule slots, and custom columns.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the semester workspace.",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the semester.",
+          "maxLength": 200
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year string (e.g. 2026-2027).",
+          "maxLength": 50
+        },
+        "startDate": {
+          "type": "string",
+          "description": "ISO start date of the semester.",
+          "maxLength": 30
+        },
+        "endDate": {
+          "type": "string",
+          "description": "ISO end date of the semester.",
+          "maxLength": 30
+        },
+        "startWeekNumber": {
+          "type": "number",
+          "description": "Starting week number for semester schedule."
+        },
+        "teachers": {
+          "type": "array",
+          "description": "List of teacher records and their assigned courses."
+        },
+        "customColumns": {
+          "type": "array",
+          "description": "Custom dynamic table columns for the semester."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Server timestamp of last update."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "User ID of the member who made the last change.",
+          "maxLength": 128
+        }
+      },
+      "required": ["id", "name", "startDate", "endDate"]
+    },
+    "MasterCatalog": {
+      "title": "MasterCatalog",
+      "description": "Shared repository for master subjects, master classes, master teachers, and holidays.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identifier for the master catalog singleton doc.",
+          "maxLength": 128
+        },
+        "masterSubjects": {
+          "type": "array",
+          "description": "List of all master subjects."
+        },
+        "masterClasses": {
+          "type": "array",
+          "description": "List of all master classes."
+        },
+        "masterTeachers": {
+          "type": "array",
+          "description": "List of all master teachers."
+        },
+        "holidays": {
+          "type": "array",
+          "description": "List of holidays and vacation periods."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Server timestamp of last update."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "User ID of the member who made the update.",
+          "maxLength": 128
+        }
+      },
+      "required": ["id"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public profile record of an authorized user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UID of the user matching request.auth.uid.",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the authenticated user.",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user.",
+          "maxLength": 200
+        },
+        "role": {
+          "type": "string",
+          "description": "User access role.",
+          "enum": ["admin", "editor", "viewer"]
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Server timestamp of last activity."
+        }
+      },
+      "required": ["id", "email"]
+    }
+  },
+  "firestore": {
+    "/semesters/{semesterId}": {
+      "schema": "SemesterWorkspace",
+      "description": "Document per semester containing all teaching assignments."
+    },
+    "/catalogs/{catalogId}": {
+      "schema": "MasterCatalog",
+      "description": "Singleton master catalog repository for shared subjects, classes, and teachers."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile information."
+    }
+  }
+}
