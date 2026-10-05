@@ -61,7 +61,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
   coTeachingGroups,
   colVisibility,
   colWidths: initialColWidths,
-  initialGroupBy = 'teacher',
+  initialGroupBy = 'class',
   initialWeekRange = 'WEEK_20',
 }) => {
   const printableRef = useRef<HTMLDivElement>(null);

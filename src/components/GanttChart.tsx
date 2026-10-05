@@ -174,8 +174,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return coTeachingGroups.filter((g) => g.isOverlapping).length;
   }, [coTeachingGroups]);
 
-  // Group By State: 'teacher' | 'class'
-  const [groupBy, setGroupBy] = useState<'teacher' | 'class'>('teacher');
+  // Group By State: 'class' (default) | 'teacher'
+  const [groupBy, setGroupBy] = useState<'teacher' | 'class'>('class');
 
   // Parent Class Filter when groupBy === 'class'
   const [selectedParentClass, setSelectedParentClass] = useState<string>('ALL');
@@ -1233,8 +1233,21 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           </select>
         </div>
 
-        {/* Group By Mode Toggle: Teacher vs Class */}
+        {/* Group By Mode Toggle: Class vs Teacher (Default: Theo Lớp Chung) */}
         <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+          <button
+            type="button"
+            onClick={() => setGroupBy('class')}
+            className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              groupBy === 'class'
+                ? 'bg-white text-purple-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            title="Gom nhóm các môn học theo Cụm Lớp Chung & Nhóm Con (Mặc định)"
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
+            <span>Theo Lớp Chung</span>
+          </button>
           <button
             type="button"
             onClick={() => setGroupBy('teacher')}
@@ -1247,19 +1260,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           >
             <Users className="w-3.5 h-3.5" />
             <span>Theo GV</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupBy('class')}
-            className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-              groupBy === 'class'
-                ? 'bg-white text-purple-900 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-            title="Gom nhóm các môn học theo Cụm Lớp Chung & Nhóm Con"
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>Theo Lớp Chung</span>
           </button>
         </div>
 
@@ -1599,17 +1599,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             ) : null}
           </button>
         )}
-
-        {/* PDF Preview & Download Button */}
-        <button
-          type="button"
-          onClick={() => setLocalIsPrintOpen(true)}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors ml-auto sm:ml-0"
-          title="Xem trước bản in và xuất file PDF chất lượng cao"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          <span>Xem & In PDF</span>
-        </button>
       </div>
 
       {/* Fullscreen Header Banner when active */}
