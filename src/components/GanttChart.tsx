@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Calendar,
   CalendarRange,
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronsDown,
+  ChevronsUp,
   Clock,
   Columns,
   Eye,
@@ -42,6 +47,7 @@ import { detectCoTeachingGroups } from '../utils/coTeachingHelper';
 import { CoTeachingScannerModal } from './CoTeachingScannerModal';
 import { GanttPrintView } from './GanttPrintView';
 import { GanttQuickSchedulePopover } from './GanttQuickSchedulePopover';
+import { ReorderClassesModal } from './ReorderClassesModal';
 
 export interface GanttColumnVisibility {
   [key: string]: boolean;
@@ -180,6 +186,26 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   // Parent Class Filter when groupBy === 'class'
   const [selectedParentClass, setSelectedParentClass] = useState<string>('ALL');
 
+  // Custom Parent Class Order State
+  const [customClassOrder, setCustomClassOrder] = useState<string[]>(() => {
+    if (uiSettings?.parentClassOrder && uiSettings.parentClassOrder.length > 0) {
+      return uiSettings.parentClassOrder;
+    }
+    try {
+      const saved = localStorage.getItem('edutrack_parent_class_order_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    if (uiSettings?.parentClassOrder && Array.isArray(uiSettings.parentClassOrder)) {
+      setCustomClassOrder(uiSettings.parentClassOrder);
+    }
+  }, [uiSettings?.parentClassOrder]);
+
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
+
   // Collapsed state per Parent Class in Gantt
   const [collapsedParentClasses, setCollapsedParentClasses] = useState<Record<string, boolean>>({});
 
@@ -191,6 +217,40 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       ...prev,
       [parentKey]: !prev[parentKey],
     }));
+  };
+
+  const handleMoveParentClass = (parentKey: string, direction: 'up' | 'down') => {
+    const currentKeys = classFamilyGroups.map((f) => f.parentKey);
+    const idx = currentKeys.indexOf(parentKey);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= currentKeys.length) return;
+
+    const newOrder = [...currentKeys];
+    const temp = newOrder[idx];
+    newOrder[idx] = newOrder[targetIdx];
+    newOrder[targetIdx] = temp;
+
+    setCustomClassOrder(newOrder);
+    try {
+      localStorage.setItem('edutrack_parent_class_order_v1', JSON.stringify(newOrder));
+    } catch {}
+    if (onUpdateUiSettings) {
+      onUpdateUiSettings({ parentClassOrder: newOrder });
+    }
+    if (onToast) {
+      onToast(`Đã chuyển lớp ${parentKey} ${direction === 'up' ? 'lên trên' : 'xuống dưới'}`);
+    }
+  };
+
+  const handleSaveCustomOrder = (newOrder: string[]) => {
+    setCustomClassOrder(newOrder);
+    try {
+      localStorage.setItem('edutrack_parent_class_order_v1', JSON.stringify(newOrder));
+    } catch {}
+    if (onUpdateUiSettings) {
+      onUpdateUiSettings({ parentClassOrder: newOrder });
+    }
   };
 
   const searchTerm = parentSearchTerm !== undefined ? parentSearchTerm : localSearchTerm;
@@ -774,9 +834,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       }
     });
 
-    const sortedFamilies = Array.from(familyMap.values()).sort((a, b) =>
-      a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true })
-    );
+    const sortedFamilies = Array.from(familyMap.values()).sort((a, b) => {
+      if (customClassOrder && customClassOrder.length > 0) {
+        const idxA = customClassOrder.indexOf(a.parentKey);
+        const idxB = customClassOrder.indexOf(b.parentKey);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+      }
+      return a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true });
+    });
 
     // Sort items inside each family by childClass, then subjectName
     sortedFamilies.forEach((f) => {
@@ -1282,6 +1349,50 @@ export const GanttChart: React.FC<GanttChartProps> = ({
               ))}
             </select>
           </div>
+        )}
+
+        {/* Quick Collapse / Expand All */}
+        <button
+          type="button"
+          onClick={() => {
+            const isAllCollapsed = classFamilyGroups.length > 0 && classFamilyGroups.every((f) => !!collapsedParentClasses[f.parentKey]);
+            if (isAllCollapsed) {
+              setCollapsedParentClasses({});
+            } else {
+              const all: Record<string, boolean> = {};
+              classFamilyGroups.forEach((f) => {
+                all[f.parentKey] = true;
+              });
+              setCollapsedParentClasses(all);
+            }
+          }}
+          className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+          title="Thu gọn hoặc mở rộng toàn bộ các lớp"
+        >
+          {classFamilyGroups.length > 0 && classFamilyGroups.every((f) => !!collapsedParentClasses[f.parentKey]) ? (
+            <>
+              <ChevronsDown className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Mở rộng tất cả</span>
+            </>
+          ) : (
+            <>
+              <ChevronsUp className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Thu gọn tất cả</span>
+            </>
+          )}
+        </button>
+
+        {/* Reorder Classes Modal Trigger */}
+        {groupBy === 'class' && (
+          <button
+            type="button"
+            onClick={() => setIsReorderModalOpen(true)}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+            title="Tùy chỉnh thứ tự hiển thị các lớp"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Đổi thứ tự lớp</span>
+          </button>
         )}
 
         {/* Column Visibility & Width Settings Dropdown */}
@@ -1986,52 +2097,85 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     return (
                       <React.Fragment key={`family-${family.parentKey}`}>
                         {/* Parent Class Section Header Banner */}
-                        <tr className="bg-gradient-to-r from-purple-100/90 via-purple-50 to-white text-purple-950 font-bold border-t-2 border-b border-purple-300 select-none sticky z-20">
+                        <tr className="bg-slate-100/95 hover:bg-slate-200/60 text-slate-900 font-bold border-t-2 border-b border-slate-300 select-none sticky z-20 transition-colors">
                           <td
                             colSpan={visibleStaticCount + displayedWeeks.length}
                             className="py-2 px-3 shadow-2xs"
                           >
                             <div className="flex items-center justify-between gap-3 flex-wrap">
-                              {/* Left: Parent Name & Details */}
+                              {/* Left: Parent Class Code & Details */}
                               <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                   type="button"
                                   onClick={() => toggleParentCollapse(family.parentKey)}
-                                  className="p-1 rounded-md hover:bg-purple-200 text-purple-800 cursor-pointer transition-colors"
-                                  title={isCollapsed ? 'Mở rộng cụm lớp này' : 'Thu gọn cụm lớp này'}
+                                  className="p-1 rounded-md hover:bg-slate-200 text-slate-700 cursor-pointer transition-colors"
+                                  title={isCollapsed ? 'Mở rộng lớp này' : 'Thu gọn lớp này'}
                                 >
                                   {isCollapsed ? (
-                                    <ChevronRight className="w-4 h-4 text-purple-800" />
+                                    <ChevronRight className="w-4 h-4 text-slate-700" />
                                   ) : (
-                                    <ChevronDown className="w-4 h-4 text-purple-800" />
+                                    <ChevronDown className="w-4 h-4 text-slate-700" />
                                   )}
                                 </button>
 
-                                <span className="font-mono text-xs sm:text-sm font-black text-purple-950 bg-white px-2.5 py-0.5 rounded-md border border-purple-300 shadow-2xs">
-                                  🏫 CỤM LỚP CHUNG: {family.parentKey}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-xs sm:text-sm font-extrabold text-slate-900 bg-white px-2.5 py-0.5 rounded-md border border-slate-300 shadow-2xs flex items-center gap-1.5">
+                                    <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    <span>{family.parentKey}</span>
+                                  </span>
 
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-200/80 text-purple-900 border border-purple-300">
-                                  {family.subgroups.length} Lớp con: {family.subgroups.join(', ')}
-                                </span>
+                                  {/* Quick Up/Down Row Reorder Buttons */}
+                                  <div className="flex items-center bg-white border border-slate-300 rounded-md p-0.5 shadow-2xs">
+                                    <button
+                                      type="button"
+                                      disabled={familyIdx === 0}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMoveParentClass(family.parentKey, 'up');
+                                      }}
+                                      className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-20 disabled:pointer-events-none cursor-pointer transition-colors"
+                                      title="Di chuyển lớp này lên trên"
+                                    >
+                                      <ArrowUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={familyIdx === filteredFamilyGroups.length - 1}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMoveParentClass(family.parentKey, 'down');
+                                      }}
+                                      className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-20 disabled:pointer-events-none cursor-pointer transition-colors"
+                                      title="Di chuyển lớp này xuống dưới"
+                                    >
+                                      <ArrowDown className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {family.subgroups.length > 1 && (
+                                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-200/80 text-slate-700 border border-slate-300">
+                                    {family.subgroups.length} lớp con
+                                  </span>
+                                )}
 
                                 {family.major && (
-                                  <span className="text-[11px] text-purple-900 font-medium hidden md:inline">
-                                    · {family.major}
+                                  <span className="text-xs text-slate-600 font-medium hidden md:inline">
+                                    {family.major}
                                   </span>
                                 )}
 
                                 {family.studentCount && (
-                                  <span className="text-[11px] text-sky-800 font-semibold hidden sm:inline">
-                                    ({family.studentCount} SV)
+                                  <span className="text-[11px] text-slate-500 font-medium bg-white px-1.5 py-0.5 rounded border border-slate-200 hidden sm:inline">
+                                    {family.studentCount} SV
                                   </span>
                                 )}
                               </div>
 
-                              {/* Right: Subgroup Filters & Hours Summary */}
+                              {/* Right: Clean Subgroup Tabs & Hours Summary */}
                               <div className="flex items-center gap-2 flex-wrap">
                                 {family.subgroups.length > 1 && (
-                                  <div className="flex items-center gap-1 bg-white/90 p-0.5 rounded-lg border border-purple-200 text-[11px]">
+                                  <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-300 shadow-2xs text-[11px]">
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -2042,13 +2186,13 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                                       }
                                       className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${
                                         currentSubTab === 'ALL'
-                                          ? 'bg-purple-700 text-white shadow-2xs'
-                                          : 'text-purple-900 hover:bg-purple-100'
+                                          ? 'bg-slate-800 text-white shadow-2xs'
+                                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                                       }`}
                                     >
                                       Tất cả ({family.items.length})
                                     </button>
-                                    {family.subgroups.map((sub, sIdx) => {
+                                    {family.subgroups.map((sub) => {
                                       const count = family.items.filter((i) => i.childClass === sub).length;
                                       return (
                                         <button
@@ -2062,20 +2206,26 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                                           }
                                           className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono cursor-pointer transition-all ${
                                             currentSubTab === sub
-                                              ? 'bg-purple-700 text-white shadow-2xs'
-                                              : 'text-purple-900 hover:bg-purple-100'
+                                              ? 'bg-emerald-700 text-white shadow-2xs'
+                                              : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
                                           }`}
+                                          title={`Lớp con: ${sub}`}
                                         >
-                                          Nhóm {sIdx + 1}: {sub} ({count})
+                                          {sub} ({count})
                                         </button>
                                       );
                                     })}
                                   </div>
                                 )}
 
-                                <span className="text-[11px] px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
-                                  {family.items.length} môn · {family.totalHours} tiết ({family.totalTheoryHours} LT + {family.totalPracticeHours} TH)
-                                </span>
+                                <div className="text-xs px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-950 font-bold border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
+                                  <span>{family.items.length} môn</span>
+                                  <span className="text-emerald-300">•</span>
+                                  <span>{family.totalHours} tiết</span>
+                                  <span className="text-[11px] font-medium text-emerald-700">
+                                    ({family.totalTheoryHours} LT + {family.totalPracticeHours} TH)
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </td>
@@ -2640,6 +2790,16 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           }}
         />
       )}
+
+      {/* Reorder Parent Classes Modal */}
+      <ReorderClassesModal
+        isOpen={isReorderModalOpen}
+        onClose={() => setIsReorderModalOpen(false)}
+        families={classFamilyGroups}
+        currentOrder={customClassOrder}
+        onSaveOrder={handleSaveCustomOrder}
+        onToast={onToast}
+      />
     </div>
   );
 };

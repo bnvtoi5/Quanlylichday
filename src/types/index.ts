@@ -148,6 +148,8 @@ export interface AppUiSettings {
   ganttFitToScreen?: boolean;
   ganttWeekRange?: string;
   tableColumnWidths?: Record<string, number>;
+  parentClassOrder?: string[];
+  teacherOrder?: string[];
 }
 
 export interface AppState {

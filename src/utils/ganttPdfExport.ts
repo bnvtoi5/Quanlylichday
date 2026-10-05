@@ -121,9 +121,22 @@ export async function exportGanttPdfDirectly({
       });
     });
 
-    const sortedFamilies = Array.from(parentMap.values()).sort((a, b) =>
-      a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true })
-    );
+    let customClassOrder: string[] = [];
+    try {
+      const saved = localStorage.getItem('edutrack_parent_class_order_v1');
+      if (saved) customClassOrder = JSON.parse(saved);
+    } catch {}
+
+    const sortedFamilies = Array.from(parentMap.values()).sort((a, b) => {
+      if (customClassOrder && customClassOrder.length > 0) {
+        const idxA = customClassOrder.indexOf(a.parentKey);
+        const idxB = customClassOrder.indexOf(b.parentKey);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+      }
+      return a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true });
+    });
 
     sortedFamilies.forEach((f) => {
       f.items.sort((a, b) => {
@@ -267,12 +280,12 @@ export async function exportGanttPdfDirectly({
     classFamilyGroups.forEach((family) => {
       // Parent Class Header Banner
       tableHtml += `
-        <tr style="background: linear-gradient(to right, #f3e8ff, #faf5ff, #ffffff); border-top: 2px solid #d8b4fe; border-bottom: 1px solid #d8b4fe; font-weight: 700; color: #581c87;">
-          <td colspan="${8 + semesterWeeks.length}" style="padding: 6px 12px;">
+        <tr style="background: #f1f5f9; border-top: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #0f172a;">
+          <td colspan="${8 + semesterWeeks.length}" style="padding: 5px 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-family: monospace; font-weight: 900; background: #ffffff; padding: 2px 8px; border-radius: 4px; border: 1px solid #d8b4fe; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">🏫 CỤM LỚP CHUNG: ${family.parentKey}</span>
-                <span style="font-size: 10px; background: #e9d5ff; color: #581c87; padding: 2px 8px; border-radius: 12px; border: 1px solid #c084fc;">${family.subgroups.length} Lớp con: ${family.subgroups.join(', ')}</span>
+                <span style="font-family: monospace; font-weight: 800; background: #ffffff; padding: 2px 8px; border-radius: 4px; border: 1px solid #cbd5e1;">${family.parentKey}</span>
+                ${family.subgroups.length > 1 ? `<span style="font-size: 10px; background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 12px; border: 1px solid #cbd5e1;">${family.subgroups.length} lớp con: ${family.subgroups.join(', ')}</span>` : ''}
               </div>
               <span style="font-size: 10px; font-weight: 700; color: #065f46; background: #ecfdf5; padding: 2px 8px; border-radius: 4px; border: 1px solid #a7f3d0;">
                 ${family.items.length} môn · ${family.totalHours} tiết (${family.totalTheoryHours} LT + ${family.totalPracticeHours} TH)

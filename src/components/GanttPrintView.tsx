@@ -249,9 +249,22 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
       });
     });
 
-    const sortedFamilies = Array.from(parentMap.values()).sort((a, b) =>
-      a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true })
-    );
+    let customClassOrder: string[] = [];
+    try {
+      const saved = localStorage.getItem('edutrack_parent_class_order_v1');
+      if (saved) customClassOrder = JSON.parse(saved);
+    } catch {}
+
+    const sortedFamilies = Array.from(parentMap.values()).sort((a, b) => {
+      if (customClassOrder && customClassOrder.length > 0) {
+        const idxA = customClassOrder.indexOf(a.parentKey);
+        const idxB = customClassOrder.indexOf(b.parentKey);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+      }
+      return a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true });
+    });
 
     sortedFamilies.forEach((f) => {
       f.items.sort((a, b) => {
@@ -694,32 +707,34 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                       return displayedFamilies.map((family) => {
                         return (
                           <React.Fragment key={`family-${family.parentKey}`}>
-                            {/* Parent Class Section Banner with Rich Styling */}
-                            <tr className="bg-gradient-to-r from-purple-100/90 via-purple-50 to-white text-purple-950 font-bold border-t-2 border-b border-purple-300">
+                            {/* Parent Class Section Banner with Clean Minimalist Styling */}
+                            <tr className="bg-slate-100 text-slate-900 font-bold border-t-2 border-b border-slate-300">
                               <td
                                 colSpan={totalTableColCount}
-                                className="py-2 px-3"
+                                className="py-1.5 px-3"
                               >
                                 <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-mono font-black bg-white px-2.5 py-0.5 rounded border border-purple-300 shadow-2xs">
-                                      🏫 CỤM LỚP CHUNG: {family.parentKey}
+                                    <span className="font-mono font-extrabold bg-white text-slate-900 px-2 py-0.5 rounded border border-slate-300 shadow-2xs">
+                                      {family.parentKey}
                                     </span>
-                                    <span className="text-[10px] bg-purple-200/90 text-purple-900 px-2 py-0.5 rounded-full font-bold border border-purple-300">
-                                      {family.subgroups.length} Lớp con: {family.subgroups.join(', ')}
-                                    </span>
+                                    {family.subgroups.length > 1 && (
+                                      <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold border border-slate-300">
+                                        {family.subgroups.length} lớp con: {family.subgroups.join(', ')}
+                                      </span>
+                                    )}
                                     {family.major && (
-                                      <span className="text-[10px] text-purple-900 font-semibold hidden md:inline">
+                                      <span className="text-[10px] text-slate-600 font-semibold hidden md:inline">
                                         · {family.major}
                                       </span>
                                     )}
                                     {family.studentCount && (
-                                      <span className="text-[10px] text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 font-bold">
-                                        ({family.studentCount} SV)
+                                      <span className="text-[10px] text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-bold">
+                                        {family.studentCount} SV
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[10px] font-bold text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-300 shadow-2xs">
+                                  <span className="text-[10px] font-bold text-emerald-950 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 shadow-2xs">
                                     {family.items.length} môn · {family.totalHours} tiết ({family.totalTheoryHours} LT + {family.totalPracticeHours} TH)
                                   </span>
                                 </div>

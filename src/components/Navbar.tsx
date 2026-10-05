@@ -67,9 +67,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [isAssignmentDropdownOpen, setIsAssignmentDropdownOpen] = useState(false);
-  const assignmentDropdownRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const updateTime = () => {
       const vnNow = getVietnamNow();
@@ -92,67 +89,49 @@ export const Navbar: React.FC<NavbarProps> = ({
       ) {
         setIsExportDropdownOpen(false);
       }
-      if (
-        assignmentDropdownRef.current &&
-        !assignmentDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsAssignmentDropdownOpen(false);
-      }
     };
-    if (isExportDropdownOpen || isAssignmentDropdownOpen) {
+    if (isExportDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isExportDropdownOpen, isAssignmentDropdownOpen]);
+  }, [isExportDropdownOpen]);
 
   return (
     <header className="bg-slate-900 border-b border-slate-800/80 text-white sticky top-0 z-40 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-15 gap-3">
-          {/* Refined Minimalist Brand Logo */}
+        <div className="flex items-center justify-between h-12 py-1 gap-3">
+          {/* Left: Semester Selector & Clock */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-emerald-400 flex items-center justify-center font-bold shadow-xs">
-              <span className="font-mono text-sm font-extrabold tracking-tighter">ET</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-base text-slate-100 tracking-tight">EduTrack</span>
-                <span className="text-[11px] text-slate-400 font-medium px-1.5 py-0.5 rounded bg-slate-800/70 border border-slate-700/60 hidden sm:inline-block">
-                  Quản Lý Giảng Dạy
-                </span>
-              </div>
-              {/* Subtle Vietnam Time Indicator */}
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                <Clock className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                <span>{vietnamDateStr || 'Giờ Việt Nam (UTC+7)'}</span>
-              </div>
-            </div>
-          </div>
+            <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700/70 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <select
+                value={activeSemester.id}
+                onChange={(e) => onSelectSemester(e.target.value)}
+                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-1 max-w-[180px] sm:max-w-[260px] truncate"
+                title="Chọn học kỳ làm việc"
+              >
+                {semesters.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-slate-800 text-white">
+                    {s.name}
+                  </option>
+                ))}
+              </select>
 
-          {/* Center: Semester Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700/70 shadow-2xs">
-            <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="text-xs text-slate-400 font-medium hidden md:inline">Space:</span>
-            <select
-              value={activeSemester.id}
-              onChange={(e) => onSelectSemester(e.target.value)}
-              className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-1 max-w-[160px] sm:max-w-[220px] truncate"
-            >
-              {semesters.map((s) => (
-                <option key={s.id} value={s.id} className="bg-slate-800 text-white">
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              <button
+                onClick={onOpenSemesterModal}
+                title="Quản lý học kỳ / Sửa thời gian & số tuần"
+                className="text-[11px] bg-slate-700/80 hover:bg-slate-600 text-slate-200 px-2 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0 font-medium cursor-pointer"
+              >
+                <Plus className="w-3 h-3 text-emerald-400" />
+                <span>Quản lý kỳ</span>
+              </button>
+            </div>
 
-            <button
-              onClick={onOpenSemesterModal}
-              title="Quản lý học kỳ / Sửa thời gian & số tuần Gantt Chart"
-              className="text-[11px] bg-slate-700/80 hover:bg-slate-600 text-slate-200 px-2 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0 font-medium cursor-pointer"
-            >
-              <Plus className="w-3 h-3 text-emerald-400" />
-              <span>Quản lý kỳ</span>
-            </button>
+            {/* Vietnam Clock */}
+            <div className="items-center gap-1.5 text-[11px] text-slate-400 font-mono hidden md:flex">
+              <Clock className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span>{vietnamDateStr || 'Giờ Việt Nam (UTC+7)'}</span>
+            </div>
           </div>
 
           {/* Right Action Tools */}
@@ -297,77 +276,60 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* View Mode Tabs Navigation */}
         <div className="flex items-center justify-between border-t border-slate-800 py-1.5 overflow-visible">
           <div className="flex items-center gap-1.5 bg-slate-800/70 p-1 rounded-lg border border-slate-700/60 shrink-0 overflow-visible">
-            {/* Unified Assignment Dropdown Tab */}
-            <div className="relative" ref={assignmentDropdownRef}>
+            {/* Unified Assignment Tab with High-Visibility Integrated Dropdown */}
+            <div
+              className={`flex items-center rounded-lg transition-all p-0.5 border ${
+                viewMode === 'table' || viewMode === 'classes'
+                  ? 'bg-emerald-600/90 border-emerald-500 text-white shadow-xs'
+                  : 'bg-slate-800/80 border-slate-700/70 text-slate-300 hover:text-white hover:bg-slate-700/60'
+              }`}
+            >
               <button
                 type="button"
-                onClick={() => setIsAssignmentDropdownOpen(!isAssignmentDropdownOpen)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === 'table' || viewMode === 'classes'
-                    ? 'bg-emerald-600 text-white shadow-xs font-bold'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
-                title="Chọn chế độ phân công giảng dạy (Theo GV / Theo Lớp)"
+                onClick={() => {
+                  if (viewMode !== 'table' && viewMode !== 'classes') {
+                    onChangeViewMode('table');
+                  }
+                }}
+                className="px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 cursor-pointer rounded-l-md hover:bg-white/10 transition-colors"
+                title="Chuyển đến chế độ Phân công giảng dạy"
               >
                 {viewMode === 'classes' ? (
-                  <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                  <GraduationCap className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                 ) : (
-                  <TableProperties className="w-3.5 h-3.5 text-emerald-200" />
+                  <TableProperties className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
                 )}
-                <span>
-                  {viewMode === 'classes' ? 'Phân Công Theo Lớp' : 'Phân Công Theo GV'}
-                </span>
-                <ChevronDown
-                  className={`w-3 h-3 ml-0.5 transition-transform duration-200 opacity-80 ${
-                    isAssignmentDropdownOpen ? 'rotate-180' : ''
-                  }`}
-                />
+                <span>Phân công:</span>
               </button>
 
-              {/* Elegant Dropdown Menu */}
-              {isAssignmentDropdownOpen && (
-                <div className="absolute left-0 top-full mt-1.5 w-56 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl p-1 z-50 text-white animate-in fade-in zoom-in-95">
-                  {/* 1. Phân Công Theo GV (Đứng trên, mặc định) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChangeViewMode('table');
-                      setIsAssignmentDropdownOpen(false);
-                    }}
-                    className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
-                      viewMode === 'table'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <TableProperties className="w-3.5 h-3.5 text-emerald-300" />
-                      <span>Phân Công Theo GV</span>
-                    </div>
-                    {viewMode === 'table' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
-                  </button>
-
-                  {/* 2. Phân Công Theo Lớp */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChangeViewMode('classes');
-                      setIsAssignmentDropdownOpen(false);
-                    }}
-                    className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer mt-0.5 ${
-                      viewMode === 'classes'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Phân Công Theo Lớp</span>
-                    </div>
-                    {viewMode === 'classes' && <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />}
-                  </button>
-                </div>
-              )}
+              <div className="relative flex items-center">
+                <select
+                  value={viewMode === 'classes' ? 'classes' : 'table'}
+                  onChange={(e) => {
+                    const mode = e.target.value as 'table' | 'classes';
+                    onChangeViewMode(mode);
+                  }}
+                  className={`text-xs font-bold py-1 pl-2 pr-6 rounded-md cursor-pointer focus:outline-none transition-all appearance-none border ${
+                    viewMode === 'table' || viewMode === 'classes'
+                      ? 'bg-emerald-700 text-white border-emerald-400/40 hover:bg-emerald-600 focus:ring-1 focus:ring-emerald-300'
+                      : 'bg-slate-900 text-slate-200 border-slate-600/80 hover:bg-slate-800 focus:ring-1 focus:ring-emerald-400'
+                  }`}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334d399' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 0.35rem center',
+                    backgroundSize: '0.85em 0.85em',
+                  }}
+                  title="Chọn xem Phân công theo GV (Mặc định) hoặc theo Lớp"
+                >
+                  <option value="table" className="bg-slate-900 text-white font-semibold py-1">
+                    Theo GV (Mặc định)
+                  </option>
+                  <option value="classes" className="bg-slate-900 text-white font-semibold py-1">
+                    Theo Lớp
+                  </option>
+                </select>
+              </div>
             </div>
 
             {/* Tab: Tiến Độ Tuần (Gantt Chart) */}
