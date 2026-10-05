@@ -66,6 +66,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [isAssignmentDropdownOpen, setIsAssignmentDropdownOpen] = useState(false);
+  const assignmentDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const updateTime = () => {
       const vnNow = getVietnamNow();
@@ -79,7 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Close export dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -88,12 +91,18 @@ export const Navbar: React.FC<NavbarProps> = ({
       ) {
         setIsExportDropdownOpen(false);
       }
+      if (
+        assignmentDropdownRef.current &&
+        !assignmentDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsAssignmentDropdownOpen(false);
+      }
     };
-    if (isExportDropdownOpen) {
+    if (isExportDropdownOpen || isAssignmentDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isExportDropdownOpen]);
+  }, [isExportDropdownOpen, isAssignmentDropdownOpen]);
 
   return (
     <header className="bg-slate-900 border-b border-slate-800/80 text-white sticky top-0 z-40 shadow-sm">
@@ -286,34 +295,146 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* View Mode Tabs Navigation */}
         <div className="flex items-center justify-between border-t border-slate-800 py-1.5 overflow-x-auto">
-          <div className="flex items-center gap-1 bg-slate-800/70 p-1 rounded-lg border border-slate-700/60 shrink-0">
-            {/* Tab 1: Phân Công Theo Lớp (Class-Centric Workflow) */}
-            <button
-              onClick={() => onChangeViewMode('classes')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                viewMode === 'classes'
-                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Phân Công Theo Lớp</span>
-            </button>
+          <div className="flex items-center gap-1.5 bg-slate-800/70 p-1 rounded-lg border border-slate-700/60 shrink-0">
+            {/* Merged Tab: Phân Công Giảng Dạy (Dropdown: Phân Công Theo GV [Mặc định đứng trên] + Phân Công Theo Lớp) */}
+            <div className="relative" ref={assignmentDropdownRef}>
+              <div
+                className={`flex items-center rounded-md transition-all ${
+                  viewMode === 'table' || viewMode === 'classes'
+                    ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                }`}
+              >
+                {/* Main button: switches to current or default assignment view */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (viewMode !== 'table' && viewMode !== 'classes') {
+                      onChangeViewMode('table');
+                    } else {
+                      setIsAssignmentDropdownOpen(!isAssignmentDropdownOpen);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer rounded-l-md"
+                  title="Chuyển đến Phân công giảng dạy"
+                >
+                  {viewMode === 'classes' ? (
+                    <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                  ) : (
+                    <TableProperties className="w-3.5 h-3.5 text-emerald-200" />
+                  )}
+                  <span>
+                    {viewMode === 'classes' ? 'Phân Công Theo Lớp' : 'Phân Công Theo GV'}
+                  </span>
+                </button>
 
-            {/* Tab 2: Phân Công Theo GV */}
-            <button
-              onClick={() => onChangeViewMode('table')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-              }`}
-            >
-              <TableProperties className="w-3.5 h-3.5" />
-              <span>Phân Công Theo GV</span>
-            </button>
+                {/* Dropdown toggle button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsAssignmentDropdownOpen(!isAssignmentDropdownOpen);
+                  }}
+                  className={`px-1.5 py-1.5 text-xs rounded-r-md cursor-pointer border-l transition-colors ${
+                    viewMode === 'table' || viewMode === 'classes'
+                      ? 'border-emerald-500/80 hover:bg-emerald-700 text-emerald-100'
+                      : 'border-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white'
+                  }`}
+                  title="Chọn chế độ Phân công (Theo GV / Theo Lớp)"
+                >
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform duration-150 ${
+                      isAssignmentDropdownOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              </div>
 
-            {/* Tab 3: Tiến Độ Tuần (Gantt Chart) */}
+              {/* Assignment Sub-Menu Popover */}
+              {isAssignmentDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 text-slate-800 animate-in fade-in zoom-in-95 space-y-1">
+                  <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Chế độ phân công giảng dạy
+                  </div>
+
+                  {/* 1. Phân Công Theo GV (Đứng trên, mặc định được chọn trước) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChangeViewMode('table');
+                      setIsAssignmentDropdownOpen(false);
+                    }}
+                    className={`w-full p-2 rounded-lg text-left transition-all flex items-start gap-2.5 cursor-pointer ${
+                      viewMode === 'table'
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-950 font-semibold'
+                        : 'hover:bg-slate-50 text-slate-700 border border-transparent'
+                    }`}
+                  >
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        viewMode === 'table'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <TableProperties className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs">Phân Công Theo GV</span>
+                        {viewMode === 'table' && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-600 text-white font-bold">
+                            Đang chọn
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                        Bảng tiến độ gộp ô, quản lý số tiết & ngày bắt đầu theo Giảng viên
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* 2. Phân Công Theo Lớp */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChangeViewMode('classes');
+                      setIsAssignmentDropdownOpen(false);
+                    }}
+                    className={`w-full p-2 rounded-lg text-left transition-all flex items-start gap-2.5 cursor-pointer ${
+                      viewMode === 'classes'
+                        ? 'bg-amber-50 border border-amber-200 text-amber-950 font-semibold'
+                        : 'hover:bg-slate-50 text-slate-700 border border-transparent'
+                    }`}
+                  >
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        viewMode === 'classes'
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <GraduationCap className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs">Phân Công Theo Lớp</span>
+                        {viewMode === 'classes' && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-600 text-white font-bold">
+                            Đang chọn
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                        Quản lý danh sách môn, gán GV và tự động gom nhóm con theo Lớp học
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Tab: Tiến Độ Tuần (Gantt Chart) */}
             <button
               onClick={() => onChangeViewMode('gantt')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -326,7 +447,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Tiến Độ Tuần (Gantt Chart)</span>
             </button>
 
-            {/* Tab 4: Quản Lý GV, Môn và Lớp */}
+            {/* Tab: Quản Lý GV, Môn và Lớp */}
             <button
               onClick={() => onChangeViewMode('catalog')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -339,7 +460,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Quản Lý GV, Môn và Lớp</span>
             </button>
 
-            {/* Tab 5: Tổng Quan Học Kỳ */}
+            {/* Tab: Tổng Quan Học Kỳ */}
             <button
               onClick={() => onChangeViewMode('overview')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${

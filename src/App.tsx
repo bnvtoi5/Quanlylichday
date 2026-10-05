@@ -231,8 +231,8 @@ export default function App() {
     }
   };
 
-  // View Mode: 'classes' (Phân Công Theo Lớp), 'table' (Bảng Báo Cáo), 'gantt' (Tiến Độ Tuần Gantt Chart), 'catalog' (Quản Lý GV, Môn và Lớp), 'overview' (Tổng Quan Học Kỳ)
-  const [viewMode, setViewMode] = useState<'table' | 'classes' | 'gantt' | 'catalog' | 'overview'>('classes');
+  // View Mode: 'table' (Phân Công Theo GV - Mặc định), 'classes' (Phân Công Theo Lớp), 'gantt' (Tiến Độ Tuần Gantt Chart), 'catalog' (Quản Lý GV, Môn và Lớp), 'overview' (Tổng Quan Học Kỳ)
+  const [viewMode, setViewMode] = useState<'table' | 'classes' | 'gantt' | 'catalog' | 'overview'>('table');
 
   // Filter & Search states
   const [searchTerm, setSearchTerm] = useState('');

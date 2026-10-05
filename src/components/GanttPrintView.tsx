@@ -25,81 +25,16 @@ import { getCanonicalParentName } from '../utils/classGrouping';
 import { CoTeachingGroupInfo } from '../utils/coTeachingHelper';
 import { formatCourseScheduleSummary, formatSlotSummary, formatVietnamDate } from '../utils/vietnamTime';
 
-// 8 Rich Vivid Themes for Course Gantt Bars in Class Mode
-const GANTT_BAR_THEMES = [
-  {
-    border: 'border-sky-600',
-    borderHex: '#0284c7',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#0284c7_0,#0284c7_2px,#38bdf8_2px,#38bdf8_4px)]',
-    bgCompletedHex: '#0284c7',
-    bgPending: 'bg-sky-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-sky-950',
-  },
-  {
-    border: 'border-emerald-700',
-    borderHex: '#047857',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#059669_0,#059669_2px,#10b981_2px,#10b981_4px)]',
-    bgCompletedHex: '#059669',
-    bgPending: 'bg-emerald-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-emerald-950',
-  },
-  {
-    border: 'border-purple-600',
-    borderHex: '#9333ea',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#9333ea_0,#9333ea_2px,#c084fc_2px,#c084fc_4px)]',
-    bgCompletedHex: '#9333ea',
-    bgPending: 'bg-purple-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-purple-950',
-  },
-  {
-    border: 'border-amber-600',
-    borderHex: '#d97706',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#d97706_0,#d97706_2px,#fbbf24_2px,#fbbf24_4px)]',
-    bgCompletedHex: '#d97706',
-    bgPending: 'bg-amber-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-amber-950',
-  },
-  {
-    border: 'border-rose-600',
-    borderHex: '#e11d48',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#e11d48_0,#e11d48_2px,#fb7185_2px,#fb7185_4px)]',
-    bgCompletedHex: '#e11d48',
-    bgPending: 'bg-rose-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-rose-950',
-  },
-  {
-    border: 'border-teal-600',
-    borderHex: '#0d9488',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#0d9488_0,#0d9488_2px,#2dd4bf_2px,#2dd4bf_4px)]',
-    bgCompletedHex: '#0d9488',
-    bgPending: 'bg-teal-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-teal-950',
-  },
-  {
-    border: 'border-indigo-600',
-    borderHex: '#4f46e5',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#4f46e5_0,#4f46e5_2px,#818cf8_2px,#818cf8_4px)]',
-    bgCompletedHex: '#4f46e5',
-    bgPending: 'bg-indigo-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-indigo-950',
-  },
-  {
-    border: 'border-cyan-600',
-    borderHex: '#0891b2',
-    bgCompleted: 'bg-[repeating-linear-gradient(45deg,#0891b2_0,#0891b2_2px,#22d3ee_2px,#22d3ee_4px)]',
-    bgCompletedHex: '#0891b2',
-    bgPending: 'bg-cyan-50/60',
-    textCompleted: 'text-white',
-    textPending: 'text-cyan-950',
-  },
-];
+// Standard Clean Emerald Green Theme for Course Gantt Bars (100% High-Contrast & Legible)
+const STANDARD_EMERALD_THEME = {
+  border: 'border-emerald-700',
+  borderHex: '#047857',
+  bgCompleted: 'bg-[repeating-linear-gradient(45deg,#059669_0,#059669_2px,#10b981_2px,#10b981_4px)]',
+  bgCompletedHex: '#059669',
+  bgPending: 'bg-emerald-50/70',
+  textCompleted: 'text-white',
+  textPending: 'text-emerald-950',
+};
 
 interface GanttPrintViewProps {
   isOpen: boolean;
@@ -141,9 +76,6 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
     'WEEK_20' | 'ALL' | 'FIRST_HALF' | 'SECOND_HALF'
   >(initialWeekRange || 'WEEK_20');
 
-  // Color Palette Mode: 'colorful' (default, multi-color vibrant like the app UI) | 'emerald'
-  const [colorMode, setColorMode] = useState<'colorful' | 'emerald'>('colorful');
-
   // Selected Parent Class Filter in Print Preview (Optional, 'ALL' by default)
   const [selectedParentClass, setSelectedParentClass] = useState<string>('ALL');
 
@@ -154,16 +86,16 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
     }
   }, [initialGroupBy, isOpen]);
 
-  // Live adjustable column widths inside preview
+  // Live adjustable column widths inside preview (Default to clean legible width)
   const [previewWidths, setPreviewWidths] = useState<GanttColumnWidths>(() => ({
     ...initialColWidths,
-    weekCol: initialColWidths.weekCol || 36,
+    weekCol: Math.max(initialColWidths.weekCol || 36, 36),
   }));
 
   useEffect(() => {
     setPreviewWidths({
       ...initialColWidths,
-      weekCol: initialColWidths.weekCol || 36,
+      weekCol: Math.max(initialColWidths.weekCol || 36, 36),
     });
   }, [initialColWidths, isOpen]);
 
@@ -176,7 +108,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
     );
   }, [semester.startDate, semester.endDate, semester.startWeekNumber]);
 
-  // Filtered displayed/printed weeks according to weekRangeMode (Defaults to 20 weeks to avoid excess weeks after week 20)
+  // Filtered displayed/printed weeks according to weekRangeMode (Defaults to 20 weeks)
   const semesterWeeks = useMemo(() => {
     if (weekRangeMode === 'WEEK_20') {
       return allSemesterWeeks.slice(0, 20);
@@ -191,6 +123,30 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
     }
     return allSemesterWeeks;
   }, [allSemesterWeeks, weekRangeMode]);
+
+  // Calculate EXACT visible column count to guarantee 100% perfect colSpan without phantom columns
+  const visibleStaticColCount = useMemo(() => {
+    let count = 0;
+    if (colVisibility.stt) count++;
+    if (groupBy === 'teacher') {
+      if (colVisibility.teacher) count++;
+      if (colVisibility.position) count++;
+      if (colVisibility.subject) count++;
+      if (colVisibility.class) count++;
+    } else {
+      if (colVisibility.class) count++;
+      if (colVisibility.subject) count++;
+      if (colVisibility.teacher) count++;
+      if (colVisibility.position) count++;
+    }
+    if (colVisibility.lt) count++;
+    if (colVisibility.th) count++;
+    if (colVisibility.total) count++;
+    if (colVisibility.progress) count++;
+    return count;
+  }, [colVisibility, groupBy]);
+
+  const totalTableColCount = visibleStaticColCount + semesterWeeks.length;
 
   // Helper to give distinct colorful badges for subgroups like in the main software UI
   const getSubgroupBadgeStyle = (childClass: string, subgroups: string[]) => {
@@ -445,37 +401,6 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
               </button>
             </div>
 
-            {/* Color Palette Mode Switcher (Active in Class mode for rich vibrant colors) */}
-            {groupBy === 'class' && (
-              <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setColorMode('colorful')}
-                  className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    colorMode === 'colorful'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                  title="Hiển thị đa sắc màu phong phú theo từng môn học và nhóm lớp"
-                >
-                  <Palette className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Đa Sắc Môn</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setColorMode('emerald')}
-                  className={`px-2.5 py-1 rounded-md font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    colorMode === 'emerald'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                  title="Chỉ dùng màu xanh lục chuẩn"
-                >
-                  <span>Xanh Chuẩn</span>
-                </button>
-              </div>
-            )}
-
             {/* Parent Class Filter in Print Preview when groupBy === 'class' */}
             {groupBy === 'class' && classFamilyGroups.length > 1 && (
               <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-xs">
@@ -573,15 +498,9 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                     <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
                       BÁO CÁO TIẾN ĐỘ GIẢNG DẠY THEO TUẦN (GANTT CHART)
                     </h1>
-                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300">
+                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300">
                       {groupBy === 'class' ? 'GOM THEO LỚP HỌC' : 'GOM THEO GIẢNG VIÊN'}
                     </span>
-                    {groupBy === 'class' && colorMode === 'colorful' && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
-                        <Palette className="w-3 h-3 text-amber-600" />
-                        <span>Đa sắc môn học</span>
-                      </span>
-                    )}
                   </div>
                   <div className="text-xs font-bold text-emerald-800 mt-0.5">
                     {semester.name.toUpperCase()} · NIÊN KHÓA {semester.academicYear || '2026-2027'}
@@ -763,7 +682,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                         return (
                           <tr>
                             <td
-                              colSpan={15 + semesterWeeks.length}
+                              colSpan={totalTableColCount}
                               className="py-8 text-center text-slate-400 italic"
                             >
                               Không tìm thấy lớp học hoặc môn học nào phù hợp.
@@ -778,7 +697,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                             {/* Parent Class Section Banner with Rich Styling */}
                             <tr className="bg-gradient-to-r from-purple-100/90 via-purple-50 to-white text-purple-950 font-bold border-t-2 border-b border-purple-300">
                               <td
-                                colSpan={15 + semesterWeeks.length}
+                                colSpan={totalTableColCount}
                                 className="py-2 px-3"
                               >
                                 <div className="flex items-center justify-between text-xs flex-wrap gap-2">
@@ -807,7 +726,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                               </td>
                             </tr>
 
-                            {/* Course rows under this parent class with Multi-Color Palette & Badges */}
+                            {/* Course rows under this parent class with Standard Emerald Green Bars & Distinct Class Badges */}
                             {family.items.map((item, itemIdx) => {
                               const { teacher, course, childClass } = item;
                               const totalHours =
@@ -815,12 +734,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                               const completed = course.completedHours || 0;
                               const isDone = completed >= totalHours && totalHours > 0;
                               const schedule = computeCourseGanttSchedule(course, semesterWeeks, holidays);
-                              
-                              // Select vibrant theme per course in class mode
-                              const theme =
-                                colorMode === 'colorful'
-                                  ? GANTT_BAR_THEMES[itemIdx % GANTT_BAR_THEMES.length]
-                                  : GANTT_BAR_THEMES[1]; // Emerald default
+                              const theme = STANDARD_EMERALD_THEME;
 
                               const validPhases = (course.schedulePhases || []).filter(
                                 (p) => p.fromDate && p.scheduleSlots && p.scheduleSlots.length > 0
@@ -1033,7 +947,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                   ) : filteredTeachers.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={15 + semesterWeeks.length}
+                        colSpan={totalTableColCount}
                         className="py-8 text-center text-slate-400 italic"
                       >
                         Không tìm thấy giảng viên hoặc môn học nào phù hợp.
@@ -1045,6 +959,13 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                       const courseSpan = courses.length || 1;
 
                       if (courses.length === 0) {
+                        const remainingStatic = Math.max(
+                          1,
+                          visibleStaticColCount -
+                            (colVisibility.stt ? 1 : 0) -
+                            (colVisibility.teacher ? 1 : 0) -
+                            (colVisibility.position ? 1 : 0)
+                        );
                         return (
                           <tr key={teacher.id} className="border-b border-slate-200">
                             {colVisibility.stt && (
@@ -1070,7 +991,7 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                                 </span>
                               </td>
                             )}
-                            <td colSpan={6} className="py-2 px-2 text-slate-400 italic border-r-2 border-slate-400">
+                            <td colSpan={remainingStatic} className="py-2 px-2 text-slate-400 italic border-r-2 border-slate-400">
                               (Chưa phân công môn)
                             </td>
                             {semesterWeeks.map((w) => (
