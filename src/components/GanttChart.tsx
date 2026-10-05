@@ -206,6 +206,46 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
 
+  // Sorting mode for courses inside classes/view
+  // 'subject': Identical subject names grouped together
+  // 'class': Grouped by child class (TH1, TH2...)
+  // 'teacher': Sorted by Teacher name
+  // 'schedule': Sorted by start date
+  const [itemSortField, setItemSortField] = useState<'subject' | 'class' | 'teacher' | 'schedule'>(() => {
+    try {
+      const saved = localStorage.getItem('edutrack_gantt_item_sort_field_v1');
+      if (saved && ['subject', 'class', 'teacher', 'schedule'].includes(saved)) {
+        return saved as 'subject' | 'class' | 'teacher' | 'schedule';
+      }
+    } catch {}
+    return 'subject';
+  });
+
+  const [itemSortDirection, setItemSortDirection] = useState<'asc' | 'desc'>(() => {
+    try {
+      const saved = localStorage.getItem('edutrack_gantt_item_sort_dir_v1');
+      if (saved === 'asc' || saved === 'desc') return saved;
+    } catch {}
+    return 'asc';
+  });
+
+  const handleHeaderSort = (field: 'subject' | 'class' | 'teacher' | 'schedule') => {
+    if (itemSortField === field) {
+      const nextDir = itemSortDirection === 'asc' ? 'desc' : 'asc';
+      setItemSortDirection(nextDir);
+      try {
+        localStorage.setItem('edutrack_gantt_item_sort_dir_v1', nextDir);
+      } catch {}
+    } else {
+      setItemSortField(field);
+      setItemSortDirection('asc');
+      try {
+        localStorage.setItem('edutrack_gantt_item_sort_field_v1', field);
+        localStorage.setItem('edutrack_gantt_item_sort_dir_v1', 'asc');
+      } catch {}
+    }
+  };
+
   // Collapsed state per Parent Class in Gantt
   const [collapsedParentClasses, setCollapsedParentClasses] = useState<Record<string, boolean>>({});
 
@@ -693,6 +733,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           }
         }
 
+        // Sort courses of this teacher according to itemSortField
+        courses.sort((a, b) => {
+          let cmp = 0;
+          if (itemSortField === 'subject') {
+            cmp = a.subjectName.localeCompare(b.subjectName, 'vi');
+            if (cmp === 0) {
+              cmp = (a.className || '').localeCompare(b.className || '', 'vi', { numeric: true });
+            }
+          } else if (itemSortField === 'class') {
+            cmp = (a.className || '').localeCompare(b.className || '', 'vi', { numeric: true });
+            if (cmp === 0) {
+              cmp = a.subjectName.localeCompare(b.subjectName, 'vi');
+            }
+          } else if (itemSortField === 'schedule') {
+            const dateA = a.startDate || '';
+            const dateB = b.startDate || '';
+            cmp = dateA.localeCompare(dateB);
+          }
+          return itemSortDirection === 'asc' ? cmp : -cmp;
+        });
+
         return {
           ...teacher,
           courses,
@@ -708,7 +769,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         }
         return true;
       });
-  }, [semester.teachers, searchTerm, selectedPosition, selectedStatus]);
+  }, [semester.teachers, searchTerm, selectedPosition, selectedStatus, itemSortField, itemSortDirection]);
 
   // Precompute Gantt schedules for all courses (each course uses its own mergeRemainderHours setting)
   const courseSchedulesMap = useMemo(() => {
@@ -845,17 +906,52 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       return a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true });
     });
 
-    // Sort items inside each family by childClass, then subjectName
+    // Sort items inside each family according to selected itemSortField & itemSortDirection
     sortedFamilies.forEach((f) => {
       f.items.sort((a, b) => {
-        const cmpClass = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
-        if (cmpClass !== 0) return cmpClass;
-        return a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+        let cmp = 0;
+        if (itemSortField === 'subject') {
+          // Identical subject names appear together
+          cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi', { sensitivity: 'base' });
+          if (cmp === 0) {
+            cmp = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
+          }
+          if (cmp === 0) {
+            cmp = a.teacher.name.localeCompare(b.teacher.name, 'vi');
+          }
+        } else if (itemSortField === 'class') {
+          // Grouped by child class (TH1, TH2...)
+          cmp = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
+          if (cmp === 0) {
+            cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+          }
+          if (cmp === 0) {
+            cmp = a.teacher.name.localeCompare(b.teacher.name, 'vi');
+          }
+        } else if (itemSortField === 'teacher') {
+          // Sorted by teacher name
+          cmp = a.teacher.name.localeCompare(b.teacher.name, 'vi', { sensitivity: 'base' });
+          if (cmp === 0) {
+            cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+          }
+          if (cmp === 0) {
+            cmp = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
+          }
+        } else if (itemSortField === 'schedule') {
+          // Sorted by course start date
+          const dateA = a.course.startDate || '';
+          const dateB = b.course.startDate || '';
+          cmp = dateA.localeCompare(dateB);
+          if (cmp === 0) {
+            cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+          }
+        }
+        return itemSortDirection === 'asc' ? cmp : -cmp;
       });
     });
 
     return sortedFamilies;
-  }, [filteredTeachers, masterClasses]);
+  }, [filteredTeachers, masterClasses, customClassOrder, itemSortField, itemSortDirection]);
 
   // Filtered family groups according to parent class filter and search
   const filteredFamilyGroups = useMemo(() => {
@@ -1297,6 +1393,34 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             <option value="ALL">Tất cả</option>
             <option value="Đang dạy">🟢 Đang dạy</option>
             <option value="Đã hoàn thành">✅ Đã hoàn thành</option>
+          </select>
+        </div>
+
+        {/* Course Sorting Control */}
+        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-2xs">
+          <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="text-xs text-slate-500 font-medium">Sắp xếp:</span>
+          <select
+            value={`${itemSortField}_${itemSortDirection}`}
+            onChange={(e) => {
+              const [field, dir] = e.target.value.split('_') as [
+                'subject' | 'class' | 'teacher' | 'schedule',
+                'asc' | 'desc',
+              ];
+              setItemSortField(field);
+              setItemSortDirection(dir);
+              try {
+                localStorage.setItem('edutrack_gantt_item_sort_field_v1', field);
+                localStorage.setItem('edutrack_gantt_item_sort_dir_v1', dir);
+              } catch {}
+            }}
+            className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+            title="Chọn tiêu chí sắp xếp các hàng môn học"
+          >
+            <option value="subject_asc">📚 Theo Môn Học (Gom môn cùng tên)</option>
+            <option value="class_asc">🏫 Theo Lớp Học (Lớp con TH1, TH2...)</option>
+            <option value="teacher_asc">👤 Theo Giảng Viên (A → Z)</option>
+            <option value="schedule_asc">📅 Theo Ngày Bắt Đầu (Sớm → Muộn)</option>
           </select>
         </div>
 
@@ -1796,11 +1920,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       <th
                         rowSpan={3}
                         style={{ width: activeColWidths.teacher, left: teacherStickyLeft }}
-                        className="py-2 px-2 text-left bg-slate-200 border-r border-slate-300 sticky z-40 relative group"
+                        onClick={() => handleHeaderSort('teacher')}
+                        className="py-2 px-2 text-left bg-slate-200 hover:bg-slate-300/80 cursor-pointer border-r border-slate-300 sticky z-40 relative group transition-colors"
+                        title="Bấm để sắp xếp theo Giảng Viên"
                       >
-                        <span>Giảng Viên</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span>Giảng Viên</span>
+                          {itemSortField === 'teacher' ? (
+                            itemSortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
+                          )}
+                        </div>
                         <div
-                          onMouseDown={(e) => startResize('teacher', e)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            startResize('teacher', e);
+                          }}
                           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600 transition-colors z-50"
                           title="Kéo để chỉnh độ rộng"
                         />
@@ -1826,11 +1966,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       <th
                         rowSpan={3}
                         style={{ width: activeColWidths.subject }}
-                        className="py-2 px-2 text-left bg-slate-200 border-r border-slate-300 relative group"
+                        onClick={() => handleHeaderSort('subject')}
+                        className="py-2 px-2 text-left bg-slate-200 hover:bg-slate-300/80 cursor-pointer border-r border-slate-300 relative group transition-colors"
+                        title="Bấm để sắp xếp theo Môn Học (Gom các môn cùng tên lại gần nhau)"
                       >
-                        <span>Môn Học</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span>Môn Học</span>
+                          {itemSortField === 'subject' ? (
+                            itemSortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
+                          )}
+                        </div>
                         <div
-                          onMouseDown={(e) => startResize('subject', e)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            startResize('subject', e);
+                          }}
                           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600 transition-colors z-50"
                           title="Kéo để chỉnh độ rộng"
                         />
@@ -1841,11 +1997,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       <th
                         rowSpan={3}
                         style={{ width: activeColWidths.class }}
-                        className="py-2 px-1 text-center bg-slate-200 border-r border-slate-300 relative group"
+                        onClick={() => handleHeaderSort('class')}
+                        className="py-2 px-1 text-center bg-slate-200 hover:bg-slate-300/80 cursor-pointer border-r border-slate-300 relative group transition-colors"
+                        title="Bấm để sắp xếp theo Lớp Học"
                       >
-                        <span>Lớp</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span>Lớp</span>
+                          {itemSortField === 'class' ? (
+                            itemSortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
+                          )}
+                        </div>
                         <div
-                          onMouseDown={(e) => startResize('class', e)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            startResize('class', e);
+                          }}
                           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600 transition-colors z-50"
                           title="Kéo để chỉnh độ rộng"
                         />
@@ -1858,11 +2030,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       <th
                         rowSpan={3}
                         style={{ width: activeColWidths.class, left: classStickyLeft }}
-                        className="py-2 px-2 text-left bg-slate-200 border-r border-slate-300 sticky z-40 relative group"
+                        onClick={() => handleHeaderSort('class')}
+                        className="py-2 px-2 text-left bg-slate-200 hover:bg-slate-300/80 cursor-pointer border-r border-slate-300 sticky z-40 relative group transition-colors"
+                        title="Bấm để sắp xếp theo Lớp Học"
                       >
-                        <span>Lớp Học</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span>Lớp Học</span>
+                          {itemSortField === 'class' ? (
+                            itemSortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
+                          )}
+                        </div>
                         <div
-                          onMouseDown={(e) => startResize('class', e)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            startResize('class', e);
+                          }}
                           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600 transition-colors z-50"
                           title="Kéo để chỉnh độ rộng"
                         />
@@ -1873,11 +2061,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       <th
                         rowSpan={3}
                         style={{ width: activeColWidths.subject }}
-                        className="py-2 px-2 text-left bg-slate-200 border-r border-slate-300 relative group"
+                        onClick={() => handleHeaderSort('subject')}
+                        className="py-2 px-2 text-left bg-slate-200 hover:bg-slate-300/80 cursor-pointer border-r border-slate-300 relative group transition-colors"
+                        title="Bấm để sắp xếp theo Môn Học (Gom các môn cùng tên lại gần nhau)"
                       >
-                        <span>Môn Học</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span>Môn Học</span>
+                          {itemSortField === 'subject' ? (
+                            itemSortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
+                          )}
+                        </div>
                         <div
-                          onMouseDown={(e) => startResize('subject', e)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            startResize('subject', e);
+                          }}
                           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600 transition-colors z-50"
                           title="Kéo để chỉnh độ rộng"
                         />
@@ -1888,11 +2092,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                       <th
                         rowSpan={3}
                         style={{ width: activeColWidths.teacher }}
-                        className="py-2 px-2 text-left bg-slate-200 border-r border-slate-300 relative group"
+                        onClick={() => handleHeaderSort('teacher')}
+                        className="py-2 px-2 text-left bg-slate-200 hover:bg-slate-300/80 cursor-pointer border-r border-slate-300 relative group transition-colors"
+                        title="Bấm để sắp xếp theo Giảng Viên"
                       >
-                        <span>Giảng Viên</span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span>Giảng Viên</span>
+                          {itemSortField === 'teacher' ? (
+                            itemSortDirection === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 group-hover:opacity-100" />
+                          )}
+                        </div>
                         <div
-                          onMouseDown={(e) => startResize('teacher', e)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            startResize('teacher', e);
+                          }}
                           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600 transition-colors z-50"
                           title="Kéo để chỉnh độ rộng"
                         />

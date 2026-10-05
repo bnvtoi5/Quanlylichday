@@ -266,11 +266,38 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
       return a.parentKey.localeCompare(b.parentKey, 'vi', { sensitivity: 'base', numeric: true });
     });
 
+    let itemSortField = 'subject';
+    let itemSortDirection = 'asc';
+    try {
+      const sf = localStorage.getItem('edutrack_gantt_item_sort_field_v1');
+      if (sf) itemSortField = sf;
+      const sd = localStorage.getItem('edutrack_gantt_item_sort_dir_v1');
+      if (sd) itemSortDirection = sd;
+    } catch {}
+
     sortedFamilies.forEach((f) => {
       f.items.sort((a, b) => {
-        const cmpClass = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
-        if (cmpClass !== 0) return cmpClass;
-        return a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+        let cmp = 0;
+        if (itemSortField === 'subject') {
+          cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi', { sensitivity: 'base' });
+          if (cmp === 0) {
+            cmp = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
+          }
+          if (cmp === 0) {
+            cmp = a.teacher.name.localeCompare(b.teacher.name, 'vi');
+          }
+        } else if (itemSortField === 'class') {
+          cmp = a.childClass.localeCompare(b.childClass, 'vi', { numeric: true });
+          if (cmp === 0) {
+            cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+          }
+        } else if (itemSortField === 'teacher') {
+          cmp = a.teacher.name.localeCompare(b.teacher.name, 'vi', { sensitivity: 'base' });
+          if (cmp === 0) {
+            cmp = a.course.subjectName.localeCompare(b.course.subjectName, 'vi');
+          }
+        }
+        return itemSortDirection === 'asc' ? cmp : -cmp;
       });
     });
 
