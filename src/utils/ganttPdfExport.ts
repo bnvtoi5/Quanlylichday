@@ -17,6 +17,7 @@ export interface DirectGanttPdfOptions {
   weekColWidth?: number;
   groupBy?: 'teacher' | 'class';
   maxWeeks?: number;
+  weekHeaderFormat?: 'NUMBER' | 'SHORT' | 'FULL';
 }
 
 // 8 Vivid Color Themes for PDF Export Bars in Class Mode
@@ -55,6 +56,7 @@ export async function exportGanttPdfDirectly({
   weekColWidth = 36, // Default 36px
   groupBy = 'teacher',
   maxWeeks = 20, // Default 20 weeks to avoid excess trailing columns after week 20
+  weekHeaderFormat = 'NUMBER', // Default 1 2 3 4 5 for clean and compact presentation
 }: DirectGanttPdfOptions): Promise<void> {
   const rawWeeks = generateSemesterWeeks(
     semester.startDate,
@@ -65,6 +67,12 @@ export async function exportGanttPdfDirectly({
   // Default to 20 weeks to avoid excess empty weeks after week 20
   const effectiveMaxWeeks = maxWeeks || (rawWeeks.length > 20 ? 20 : rawWeeks.length);
   const semesterWeeks = rawWeeks.slice(0, effectiveMaxWeeks);
+
+  const getWeekHeaderLabel = (w: { weekNumber: number; weekLabel: string }) => {
+    if (weekHeaderFormat === 'SHORT') return `T${w.weekNumber}`;
+    if (weekHeaderFormat === 'FULL') return w.weekLabel;
+    return `${w.weekNumber}`; // Default 'NUMBER' (1, 2, 3...)
+  };
 
   // Group Courses by Parent Class Family (when groupBy === 'class')
   const classFamilyGroups: {
@@ -238,8 +246,8 @@ export async function exportGanttPdfDirectly({
             ${semesterWeeks
               .map(
                 (w) => `
-              <th style="padding: 4px 1px; text-align: center; border-right: 1px solid #cbd5e1; font-size: 10px; font-weight: 700; background-color: ${w.isCurrentWeek ? '#fde68a' : '#e2e8f0'}; color: ${w.isCurrentWeek ? '#451a03' : '#1e293b'};">
-                ${w.weekLabel}
+              <th style="padding: 4px 1px; text-align: center; border-right: 1px solid #cbd5e1; font-size: 11px; font-weight: 700; background-color: ${w.isCurrentWeek ? '#fde68a' : '#e2e8f0'}; color: ${w.isCurrentWeek ? '#451a03' : '#1e293b'};">
+                ${getWeekHeaderLabel(w)}
               </th>
             `
               )

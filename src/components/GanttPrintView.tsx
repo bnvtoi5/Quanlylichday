@@ -76,6 +76,9 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
     'WEEK_20' | 'ALL' | 'FIRST_HALF' | 'SECOND_HALF'
   >(initialWeekRange || 'WEEK_20');
 
+  // Week Header Display Format: 'NUMBER' (1, 2, 3... - Default, compact & clean) | 'SHORT' (T1, T2...) | 'FULL' (Tuần 1, Tuần 2...)
+  const [weekHeaderFormat, setWeekHeaderFormat] = useState<'NUMBER' | 'SHORT' | 'FULL'>('NUMBER');
+
   // Selected Parent Class Filter in Print Preview (Optional, 'ALL' by default)
   const [selectedParentClass, setSelectedParentClass] = useState<string>('ALL');
 
@@ -441,6 +444,49 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
               </button>
             </div>
 
+            {/* Week Header Format (Default 1 2 3 4 5) */}
+            <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
+              <button
+                type="button"
+                onClick={() => setWeekHeaderFormat('NUMBER')}
+                className={`px-2 py-1 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  weekHeaderFormat === 'NUMBER'
+                    ? 'bg-amber-600 text-white shadow-2xs ring-1 ring-amber-400/50'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="Chế độ số 1 2 3 4 5 (Mặc định - Gọn gàng và hiển thị trọn vẹn)"
+              >
+                <span>1 2 3</span>
+                <span className="hidden sm:inline text-[9px] bg-amber-900/90 text-amber-200 px-1 py-0.2 rounded font-extrabold">
+                  Mặc định
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekHeaderFormat('SHORT')}
+                className={`px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                  weekHeaderFormat === 'SHORT'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="Chế độ viết tắt T1 T2 T3"
+              >
+                <span>T1 T2</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekHeaderFormat('FULL')}
+                className={`px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                  weekHeaderFormat === 'FULL'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="Chế độ đầy đủ Tuần 1 Tuần 2"
+              >
+                <span>Tuần 1</span>
+              </button>
+            </div>
+
             {/* Parent Class Filter in Print Preview when groupBy === 'class' */}
             {groupBy === 'class' && classFamilyGroups.length > 1 && (
               <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-xs">
@@ -669,16 +715,26 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                     )}
 
                     {/* Week Names */}
-                    {semesterWeeks.map((week) => (
-                      <th
-                        key={week.weekIndex}
-                        className={`py-1 px-1 text-center border-r border-slate-300 text-[10px] font-bold ${
-                          week.isCurrentWeek ? 'bg-amber-200 text-amber-950 font-extrabold' : 'bg-slate-200 text-slate-800'
-                        }`}
-                      >
-                        {week.weekLabel}
-                      </th>
-                    ))}
+                    {semesterWeeks.map((week) => {
+                      const displayLabel =
+                        weekHeaderFormat === 'NUMBER'
+                          ? String(week.weekNumber)
+                          : weekHeaderFormat === 'SHORT'
+                          ? `T${week.weekNumber}`
+                          : week.weekLabel;
+
+                      return (
+                        <th
+                          key={week.weekIndex}
+                          className={`py-1 px-1 text-center border-r border-slate-300 text-[11px] font-bold ${
+                            week.isCurrentWeek ? 'bg-amber-200 text-amber-950 font-extrabold' : 'bg-slate-200 text-slate-800'
+                          }`}
+                          title={`${week.weekLabel} (${week.mondayFormatted} - ${week.sundayFormatted})`}
+                        >
+                          {displayLabel}
+                        </th>
+                      );
+                    })}
                   </tr>
 
                   {/* Header Row 2: Monday */}
