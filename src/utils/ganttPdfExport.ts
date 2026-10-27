@@ -6,6 +6,7 @@ import {
   generateSemesterWeeks,
 } from './ganttCalculator';
 import { getCanonicalParentName } from './classGrouping';
+import { detectCoTeachingGroups } from './coTeachingHelper';
 import { formatCourseScheduleSummary, formatSlotSummary, formatVietnamDate } from './vietnamTime';
 
 export interface DirectGanttPdfOptions {
@@ -72,6 +73,28 @@ export async function exportGanttPdfDirectly({
     if (weekHeaderFormat === 'SHORT') return `T${w.weekNumber}`;
     if (weekHeaderFormat === 'FULL') return w.weekLabel;
     return `${w.weekNumber}`; // Default 'NUMBER' (1, 2, 3...)
+  };
+
+  // Detect co-teaching groups (Đợt 1, Đợt 2) across all teachers in the semester
+  const coTeachingGroups = detectCoTeachingGroups(semester.teachers || teachers, holidays);
+  const getPhaseBadgeHtml = (course: any) => {
+    const coGroup = coTeachingGroups.find(
+      (g) =>
+        g.className.toUpperCase() === (course.className || '').trim().toUpperCase() &&
+        g.items.some((it) => it.course.id === course.id)
+    );
+    const coItem =
+      coGroup && coGroup.items.length >= 2
+        ? coGroup.items.find((it) => it.course.id === course.id)
+        : undefined;
+    const phaseNum = coItem?.phase || course.sequentialPhase;
+    if (!phaseNum || (!coItem && !course.sequentialPhase)) return '';
+    const isPhase1 = phaseNum === 1;
+    const bg = isPhase1 ? '#f3e8ff' : '#d1fae5';
+    const color = isPhase1 ? '#6b21a8' : '#065f46';
+    const border = isPhase1 ? '#d8b4fe' : '#6ee7b7';
+    const label = isPhase1 ? 'Đợt 1' : `Đợt ${phaseNum}`;
+    return `<span style="font-size: 8px; font-weight: 700; background-color: ${bg}; color: ${color}; border: 1px solid ${border}; padding: 1px 4px; border-radius: 3px; margin-left: 3px; display: inline-block;">${label}</span>`;
   };
 
   // Group Courses by Parent Class Family (when groupBy === 'class')
@@ -337,10 +360,13 @@ export async function exportGanttPdfDirectly({
         const starHtml = course.mergeRemainderHours
           ? `<span style="color: #f59e0b; font-weight: 900; margin-left: 4px;" title="⭐ Đã cộng dồn tiết lẻ buổi cuối">⭐</span>`
           : '';
+        const coTeachBadgeHtml = getPhaseBadgeHtml(course);
         const phaseHtml = validPhases.length > 0
-          ? `<div style="margin-top: 2px;"><span style="font-size: 8px; font-weight: 700; background-color: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; padding: 1px 4px; border-radius: 3px;">${formatSlotSummary(course.scheduleSlots)} ➔ ${validPhases.map((p: any) => formatSlotSummary(p.scheduleSlots)).join(' ➔ ')}</span></div>`
+          ? `<div style="margin-top: 2px;"><span style="font-size: 8px; font-weight: 700; background-color: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; padding: 1px 4px; border-radius: 3px;">${formatSlotSummary(course.scheduleSlots)} ➔ ${validPhases.map((p: any) => formatSlotSummary(p.scheduleSlots)).join(' ➔ ')}</span>${coTeachBadgeHtml}</div>`
           : course.scheduleSlots && course.scheduleSlots.length > 0
-          ? `<div style="margin-top: 2px;"><span style="font-size: 8px; font-weight: 700; background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 1px 4px; border-radius: 3px;">${formatSlotSummary(course.scheduleSlots)}</span></div>`
+          ? `<div style="margin-top: 2px;"><span style="font-size: 8px; font-weight: 700; background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 1px 4px; border-radius: 3px;">${formatSlotSummary(course.scheduleSlots)}</span>${coTeachBadgeHtml}</div>`
+          : coTeachBadgeHtml
+          ? `<div style="margin-top: 2px;">${coTeachBadgeHtml}</div>`
           : '';
 
         tableHtml += `
@@ -446,9 +472,10 @@ export async function exportGanttPdfDirectly({
         const starHtml = course.mergeRemainderHours
           ? `<span style="color: #f59e0b; font-weight: 900; margin-left: 4px;" title="⭐ Đã cộng dồn tiết lẻ buổi cuối">⭐</span>`
           : '';
+        const coTeachBadgeHtml = getPhaseBadgeHtml(course);
 
         tableHtml += `
-          <td style="padding: 4px 6px; font-weight: 700; color: #0f172a; border-right: 1px solid #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${course.subjectName}${starHtml}</td>
+          <td style="padding: 4px 6px; font-weight: 700; color: #0f172a; border-right: 1px solid #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${course.subjectName}${starHtml}${coTeachBadgeHtml}</td>
           <td style="padding: 4px 2px; text-align: center; font-family: monospace; font-weight: 700; font-size: 10px; border-right: 1px solid #cbd5e1;">${course.className}</td>
           <td style="padding: 4px 2px; text-align: center; border-right: 1px solid #cbd5e1;">${course.theoryHours || 0}</td>
           <td style="padding: 4px 2px; text-align: center; border-right: 1px solid #cbd5e1;">${course.practiceHours || 0}</td>
@@ -510,13 +537,26 @@ export async function exportGanttPdfDirectly({
     // Wait for DOM layout engine to settle
     await new Promise((resolve) => setTimeout(resolve, 150));
 
+    const captureHeight = Math.max(container.scrollHeight, container.offsetHeight);
+    const safePixelRatio =
+      captureHeight * 2 > 14000
+        ? Math.max(1, Math.floor((14000 / captureHeight) * 10) / 10)
+        : 2;
+
     const dataUrl = await toPng(container, {
       quality: 0.98,
-      pixelRatio: 2,
+      pixelRatio: safePixelRatio,
       backgroundColor: '#ffffff',
       cacheBust: true,
       width: totalContainerWidth,
-      height: container.offsetHeight || container.scrollHeight,
+      height: captureHeight,
+      style: {
+        width: `${totalContainerWidth}px`,
+        height: `${captureHeight}px`,
+        maxWidth: 'none',
+        maxHeight: 'none',
+        overflow: 'visible',
+      },
     });
 
     const img = new Image();
@@ -526,19 +566,25 @@ export async function exportGanttPdfDirectly({
       img.onerror = reject;
     });
 
-    const imgWidth = img.naturalWidth || img.width;
-    const imgHeight = img.naturalHeight || img.height;
+    const imgWidth = img.naturalWidth || img.width || totalContainerWidth;
+    const imgHeight = img.naturalHeight || img.height || captureHeight;
 
-    const pdfWidth = 297; // Landscape A4
-    const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+    const pdfWidth = 297; // Landscape A4 width
+    const margin = 5;
+    const drawWidth = pdfWidth - margin * 2;
+    const drawHeight = (imgHeight * drawWidth) / imgWidth;
+    const pdfPageHeight = Math.max(210, Math.ceil(drawHeight + margin * 2));
+
+    // Prevent jsPDF from swapping width & height when pdfPageHeight > 297mm
+    const pdfOrientation = pdfWidth >= pdfPageHeight ? 'landscape' : 'portrait';
 
     const pdf = new jsPDF({
-      orientation: 'landscape',
+      orientation: pdfOrientation,
       unit: 'mm',
-      format: pdfHeight > 210 ? [pdfWidth, pdfHeight + 10] : 'a4',
+      format: [pdfWidth, pdfPageHeight],
     });
 
-    pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    pdf.addImage(dataUrl, 'PNG', margin, margin, drawWidth, drawHeight);
 
     const cleanSemesterName = semester.name
       .replace(/\s+/g, '_')

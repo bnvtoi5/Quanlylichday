@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { CustomColumn, Semester, Teacher } from '../types';
+import { detectCoTeachingGroups } from './coTeachingHelper';
 
 export interface ExportExcelOptions {
   semester: Semester;
@@ -23,6 +24,9 @@ export async function exportTeachingReportToExcel({
   customTitle,
   fileNamePrefix,
 }: ExportExcelOptions): Promise<void> {
+  // Detect co-teaching groups (Đợt 1, Đợt 2) across all teachers in the semester
+  const coTeachingGroups = detectCoTeachingGroups(semester.teachers || []);
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'EduTrack System';
   workbook.lastModifiedBy = 'EduTrack System';
@@ -156,6 +160,22 @@ export async function exportTeachingReportToExcel({
       const isDone = taughtHours >= totalCourseHours && totalCourseHours > 0;
       const statusText = isDone ? 'Đã hoàn thành' : 'Đang dạy';
 
+      // Check co-teaching phase (Đợt 1, Đợt 2)
+      const coGroup = coTeachingGroups.find(
+        (g) =>
+          g.className.toUpperCase() === (c.className || '').trim().toUpperCase() &&
+          g.items.some((it) => it.course.id === c.id)
+      );
+      const coItem =
+        coGroup && coGroup.items.length >= 2
+          ? coGroup.items.find((it) => it.course.id === c.id)
+          : undefined;
+      const phaseNum = coItem?.phase || (c as any).sequentialPhase;
+      const subjectLabelWithPhase =
+        phaseNum && (coItem || (c as any).sequentialPhase)
+          ? `${c.subjectName} [${phaseNum === 1 ? 'Đợt 1' : `Đợt ${phaseNum}`}]`
+          : c.subjectName;
+
       // Custom column values
       const customColVals = customColumns.map((col) => {
         const val = c.customValues?.[col.id];
@@ -169,7 +189,7 @@ export async function exportTeachingReportToExcel({
         isFirst ? teacherIndex : '',
         isFirst ? teacher.name : '',
         isFirst ? teacher.position || 'Giảng viên' : '',
-        c.subjectName,
+        subjectLabelWithPhase,
         c.className,
         c.theoryHours || 0,
         c.practiceHours || 0,

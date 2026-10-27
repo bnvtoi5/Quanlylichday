@@ -2066,6 +2066,7 @@ export default function App() {
             {/* Resizable Merged Report Table */}
             <TeacherTable
               teachers={filteredTeachers}
+              allTeachers={activeSemester.teachers}
               customColumns={activeSemester.customColumns || []}
               holidays={appState.holidays || []}
               semesterWeeks={activeSemesterWeeks}

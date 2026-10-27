@@ -151,6 +151,21 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
 
   const totalTableColCount = visibleStaticColCount + semesterWeeks.length;
 
+  const totalTablePixelWidth = useMemo(() => {
+    let w = 0;
+    if (colVisibility.stt) w += previewWidths.stt;
+    if (colVisibility.teacher) w += previewWidths.teacher;
+    if (colVisibility.position) w += previewWidths.position;
+    if (colVisibility.subject) w += previewWidths.subject;
+    if (colVisibility.class) w += previewWidths.class;
+    if (colVisibility.lt) w += previewWidths.lt;
+    if (colVisibility.th) w += previewWidths.th;
+    if (colVisibility.total) w += previewWidths.total;
+    if (colVisibility.progress) w += previewWidths.progress;
+    w += semesterWeeks.length * previewWidths.weekCol;
+    return w;
+  }, [colVisibility, previewWidths, semesterWeeks.length]);
+
   // Helper to give distinct colorful badges for subgroups like in the main software UI
   const getSubgroupBadgeStyle = (childClass: string, subgroups: string[]) => {
     const idx = subgroups.indexOf(childClass);
@@ -317,10 +332,32 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
 
     try {
       const element = printableRef.current;
+      const captureWidth = Math.max(
+        element.scrollWidth,
+        element.offsetWidth,
+        totalTablePixelWidth + 48
+      );
+      const captureHeight = Math.max(element.scrollHeight, element.offsetHeight);
+
+      // Safeguard canvas pixel ratio for very tall tables so browser canvas never clips
+      const safePixelRatio =
+        captureHeight * 2 > 14000
+          ? Math.max(1, Math.floor((14000 / captureHeight) * 10) / 10)
+          : 2;
 
       const dataUrl = await toPng(element, {
         quality: 0.98,
-        pixelRatio: 2, // 2x high-resolution retina quality
+        pixelRatio: safePixelRatio,
+        width: captureWidth,
+        height: captureHeight,
+        style: {
+          width: `${captureWidth}px`,
+          height: `${captureHeight}px`,
+          minWidth: `${captureWidth}px`,
+          maxWidth: 'none',
+          maxHeight: 'none',
+          overflow: 'visible',
+        },
         backgroundColor: '#ffffff',
         cacheBust: true,
       });
@@ -331,20 +368,27 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
         img.onload = resolve;
       });
 
-      const imgWidth = img.naturalWidth || img.width;
-      const imgHeight = img.naturalHeight || img.height;
+      const imgWidth = img.naturalWidth || img.width || captureWidth;
+      const imgHeight = img.naturalHeight || img.height || captureHeight;
 
-      // Calculate PDF dimensions in mm (Landscape)
-      const pdfWidth = 297; // A4 landscape width (297mm)
-      const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
+      // Calculate PDF dimensions in mm (Full continuous sheet without page cutoff)
+      const pdfWidth = 297; // Standard A4 landscape width (297mm)
+      const margin = 5;
+      const drawWidth = pdfWidth - margin * 2;
+      const drawHeight = (imgHeight * drawWidth) / imgWidth;
+      const pdfPageHeight = Math.max(210, Math.ceil(drawHeight + margin * 2));
+
+      // IMPORTANT: jsPDF automatically swaps format [w, h] if orientation doesn't match whether w >= h.
+      // When pdfPageHeight > pdfWidth (tall table), we MUST pass 'portrait' so jsPDF keeps width = 297mm and height = pdfPageHeight!
+      const pdfOrientation = pdfWidth >= pdfPageHeight ? 'landscape' : 'portrait';
 
       const pdf = new jsPDF({
-        orientation: 'landscape',
+        orientation: pdfOrientation,
         unit: 'mm',
-        format: pdfHeight > 210 ? [pdfWidth, pdfHeight + 10] : 'a4',
+        format: [pdfWidth, pdfPageHeight],
       });
 
-      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(dataUrl, 'PNG', margin, margin, drawWidth, drawHeight);
 
       const cleanSemesterName = semester.name
         .replace(/\s+/g, '_')
@@ -574,7 +618,8 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
           {/* Printable Container Target */}
           <div
             ref={printableRef}
-            className="p-4 sm:p-6 bg-white border border-slate-200 rounded-xl shadow-xs min-w-[950px]"
+            style={{ minWidth: `${Math.max(950, totalTablePixelWidth + 48)}px` }}
+            className="p-4 sm:p-6 bg-white border border-slate-200 rounded-xl shadow-xs w-fit min-w-full"
           >
             {/* Header Info Banner */}
             <div className="mb-4 pb-3 border-b-2 border-slate-300">
@@ -605,8 +650,11 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
             </div>
 
             {/* Table Container */}
-            <div className="border border-slate-300 rounded-lg overflow-hidden bg-white">
-              <table className="w-full border-collapse text-[11px] text-slate-700 table-fixed">
+            <div className="border border-slate-300 rounded-lg bg-white">
+              <table
+                style={{ minWidth: `${totalTablePixelWidth}px` }}
+                className="w-full border-collapse text-[11px] text-slate-700 table-fixed"
+              >
                 <colgroup>
                   {colVisibility.stt && <col style={{ width: `${previewWidths.stt}px` }} />}
 
@@ -1185,6 +1233,30 @@ export const GanttPrintView: React.FC<GanttPrintViewProps> = ({
                                       {formatSlotSummary(course.scheduleSlots)}
                                     </span>
                                   ) : null}
+                                  {(() => {
+                                    const coGroup = coTeachingGroups?.find(
+                                      (g) =>
+                                        g.className.toUpperCase() === (course.className || '').trim().toUpperCase() &&
+                                        g.items.some((it: any) => it.course.id === course.id)
+                                    );
+                                    const coItem =
+                                      coGroup && coGroup.items.length >= 2
+                                        ? coGroup.items.find((it: any) => it.course.id === course.id)
+                                        : undefined;
+                                    const phaseNum = coItem?.phase || course.sequentialPhase;
+                                    if (!phaseNum || (!coItem && !course.sequentialPhase)) return null;
+                                    return (
+                                      <span
+                                        className={`px-1 py-0.2 rounded text-[8px] font-bold ${
+                                          phaseNum === 1
+                                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        }`}
+                                      >
+                                        {phaseNum === 1 ? 'Đợt 1' : `Đợt ${phaseNum}`}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               </td>
                             )}

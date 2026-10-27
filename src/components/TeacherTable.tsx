@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -15,10 +15,12 @@ import {
 import { AppUiSettings, CourseAssignment, CustomColumn, Holiday, Teacher, TeachingStatus } from '../types';
 import { calculateTeachingProgress } from '../utils/vietnamTime';
 import { getCourseRemainingWeeksInfo, SemesterWeek } from '../utils/ganttCalculator';
+import { detectCoTeachingGroups } from '../utils/coTeachingHelper';
 import { ConfirmModal } from './ConfirmModal';
 
 interface TeacherTableProps {
   teachers: Teacher[];
+  allTeachers?: Teacher[];
   customColumns: CustomColumn[];
   holidays?: Holiday[];
   semesterWeeks?: SemesterWeek[];
@@ -59,6 +61,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
 
 export const TeacherTable: React.FC<TeacherTableProps> = ({
   teachers,
+  allTeachers,
   customColumns,
   holidays = [],
   semesterWeeks = [],
@@ -82,6 +85,10 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
   onOpenAddTeacher,
   onAutoCalculateAll,
 }) => {
+  // Detect co-teaching groups (Đợt 1, Đợt 2) across all teachers in the semester
+  const coTeachingGroups = useMemo(() => {
+    return detectCoTeachingGroups(allTeachers && allTeachers.length > 0 ? allTeachers : teachers, holidays);
+  }, [allTeachers, teachers, holidays]);
   // Column resizing state (saved to Cloud & localStorage)
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     if (uiSettings?.tableColumnWidths) {
@@ -756,26 +763,63 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
                         </td>
                       )}
 
-                      {/* Column 3: Môn Học (Tên môn học ONLY as requested) */}
+                      {/* Column 3: Môn Học */}
                       <td className="py-2.5 px-4 font-semibold text-slate-900">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-start gap-2">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => onToggleSelectCourse(course.id)}
-                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
                           />
-                          <span className="text-slate-800 hover:text-emerald-700 transition-colors flex items-center gap-1.5">
-                            <span>{course.subjectName}</span>
-                            {course.mergeRemainderHours && (
-                              <span
-                                className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-transform hover:scale-125 shrink-0"
-                                title="⭐ Môn này đã bật cộng dồn số tiết lẻ vào buổi cuối cùng cho biểu đồ Gantt"
-                              >
-                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500 drop-shadow-[0_0_4px_rgba(245,158,11,0.7)] animate-pulse" />
-                              </span>
-                            )}
-                          </span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-slate-800 hover:text-emerald-700 transition-colors flex items-center gap-1.5 flex-wrap">
+                              <span>{course.subjectName}</span>
+                              {course.mergeRemainderHours && (
+                                <span
+                                  className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-transform hover:scale-125 shrink-0"
+                                  title="⭐ Môn này đã bật cộng dồn số tiết lẻ vào buổi cuối cùng cho biểu đồ Gantt"
+                                >
+                                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500 drop-shadow-[0_0_4px_rgba(245,158,11,0.7)] animate-pulse" />
+                                </span>
+                              )}
+                              {(() => {
+                                const coGroup = coTeachingGroups.find(
+                                  (g) =>
+                                    g.className.toUpperCase() === (course.className || '').trim().toUpperCase() &&
+                                    g.items.some((it) => it.course.id === course.id)
+                                );
+                                const coItem =
+                                  coGroup && coGroup.items.length >= 2
+                                    ? coGroup.items.find((it) => it.course.id === course.id)
+                                    : undefined;
+                                const phaseNum = coItem?.phase || course.sequentialPhase;
+                                if (!phaseNum || (!coItem && !course.sequentialPhase)) return null;
+                                const otherTeachers = coGroup
+                                  ? coGroup.items
+                                      .filter((it) => it.course.id !== course.id)
+                                      .map((it) => `${it.teacherName} (Đợt ${it.phase})`)
+                                      .join(', ')
+                                  : '';
+                                return (
+                                  <span
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                      phaseNum === 1
+                                        ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    }`}
+                                    title={
+                                      otherTeachers
+                                        ? `Môn dạy chung lớp ${course.className} — Phối hợp cùng: ${otherTeachers}`
+                                        : `Môn dạy theo đợt (Đợt ${phaseNum})`
+                                    }
+                                  >
+                                    {phaseNum === 1 ? 'Đợt 1' : `Đợt ${phaseNum} (Nối tiếp)`}
+                                  </span>
+                                );
+                              })()}
+                            </span>
+                          </div>
                         </div>
                       </td>
 
