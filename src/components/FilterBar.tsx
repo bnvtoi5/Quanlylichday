@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import {
+  CalendarClock,
   CheckSquare,
   Filter,
+  Percent,
   Plus,
+  RotateCcw,
   Search,
-  Sparkles,
   Square,
   Trash2,
   X,
@@ -20,6 +22,14 @@ interface FilterBarProps {
   availablePositions: string[];
   selectedStatus: string;
   onStatusChange: (status: string) => void;
+  minProgressPercent: string;
+  onMinProgressChange: (val: string) => void;
+  maxProgressPercent: string;
+  onMaxProgressChange: (val: string) => void;
+  remainingWeeksFilter: string;
+  onRemainingWeeksChange: (val: string) => void;
+  remainingWeeksMode: 'exact' | 'lte';
+  onRemainingWeeksModeChange: (mode: 'exact' | 'lte') => void;
   selectedCourseIds: string[];
   totalFilteredCoursesCount: number;
   isAllFilteredSelected: boolean;
@@ -38,6 +48,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   availablePositions,
   selectedStatus,
   onStatusChange,
+  minProgressPercent,
+  onMinProgressChange,
+  maxProgressPercent,
+  onMaxProgressChange,
+  remainingWeeksFilter,
+  onRemainingWeeksChange,
+  remainingWeeksMode,
+  onRemainingWeeksModeChange,
   selectedCourseIds,
   totalFilteredCoursesCount,
   isAllFilteredSelected,
@@ -62,20 +80,33 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   });
 
   const hasSelectedCourses = selectedCourseIds.length > 0;
+  const hasProgressFilter = minProgressPercent.trim() !== '' || maxProgressPercent.trim() !== '';
+  const hasRemainingWeeksFilter = remainingWeeksFilter.trim() !== '';
+  const hasAnyAdvancedFilter =
+    hasProgressFilter ||
+    hasRemainingWeeksFilter ||
+    selectedPosition !== 'ALL' ||
+    selectedStatus !== 'ALL' ||
+    searchTerm.trim() !== '';
+
+  const applyProgressPreset = (min: string, max: string) => {
+    onMinProgressChange(min);
+    onMaxProgressChange(max);
+  };
 
   return (
-    <div className="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs mb-4 space-y-3">
-      {/* Primary search & filters row */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+    <div className="bg-white rounded-xl p-3 border border-slate-200/80 shadow-xs mb-4 space-y-2.5">
+      {/* Row 1: Primary search & core filters */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
         {/* Search input */}
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Tìm theo tên Giảng viên, Môn học, Lớp (CSDL, CNTT26TH1, Nguyễn Văn A)..."
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800 placeholder-slate-400"
+            className="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800 placeholder-slate-400"
           />
           {searchTerm && (
             <button
@@ -156,6 +187,186 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <span>+ Thêm GV Vào Kỳ</span>
           </button>
         </div>
+      </div>
+
+      {/* Row 2: Progress % Range Filter & Remaining Weeks Filter (Chuẩn bị kế hoạch tuần kế tiếp) */}
+      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* 1. Filter by Progress % Range */}
+          <div
+            className={`flex flex-wrap items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors ${
+              hasProgressFilter
+                ? 'bg-blue-50/90 border-blue-300 text-blue-950 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <Percent className={`w-3.5 h-3.5 shrink-0 ${hasProgressFilter ? 'text-blue-600' : 'text-slate-500'}`} />
+            <span className="text-xs font-bold whitespace-nowrap">Tiến độ đã dạy (%):</span>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                placeholder="Từ %"
+                value={minProgressPercent}
+                onChange={(e) => onMinProgressChange(e.target.value)}
+                className="w-14 px-1.5 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-slate-800"
+                title="Phần trăm số tiết đã dạy tối thiểu (Ví dụ: 80)"
+              />
+              <span className="text-xs text-slate-400 font-bold">–</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                placeholder="Đến %"
+                value={maxProgressPercent}
+                onChange={(e) => onMaxProgressChange(e.target.value)}
+                className="w-14 px-1.5 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-slate-800"
+                title="Phần trăm số tiết đã dạy tối đa (Ví dụ: 100)"
+              />
+            </div>
+
+            {/* Quick % Range Presets */}
+            <div className="flex items-center gap-1 ml-1">
+              {[
+                { label: '80-100%', min: '80', max: '100', title: 'Từ 80% đến 100%' },
+                { label: '80-99%', min: '80', max: '99', title: 'Sắp xong (80% - 99%, chưa kết thúc)' },
+                { label: '50-80%', min: '50', max: '80', title: 'Từ 50% đến 80%' },
+                { label: '<50%', min: '0', max: '49', title: 'Dưới 50%' },
+              ].map((preset) => {
+                const isActive =
+                  minProgressPercent === preset.min && maxProgressPercent === preset.max;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() =>
+                      isActive ? applyProgressPreset('', '') : applyProgressPreset(preset.min, preset.max)
+                    }
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
+                      isActive
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200'
+                    }`}
+                    title={preset.title}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {hasProgressFilter && (
+              <button
+                type="button"
+                onClick={() => applyProgressPreset('', '')}
+                className="p-0.5 text-blue-600 hover:text-blue-900 hover:bg-blue-100 rounded cursor-pointer"
+                title="Xóa lọc % tiến độ"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* 2. Filter by Remaining Weeks Until Completion */}
+          <div
+            className={`flex flex-wrap items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors ${
+              hasRemainingWeeksFilter
+                ? 'bg-amber-50 border-amber-300 text-amber-950 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <CalendarClock
+              className={`w-3.5 h-3.5 shrink-0 ${
+                hasRemainingWeeksFilter ? 'text-amber-600' : 'text-slate-500'
+              }`}
+            />
+            <span className="text-xs font-bold whitespace-nowrap">Sắp kết thúc còn:</span>
+
+            {/* Mode selector: Đúng X tuần vs <= X tuần */}
+            <select
+              value={remainingWeeksMode}
+              onChange={(e) => onRemainingWeeksModeChange(e.target.value as 'exact' | 'lte')}
+              className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-700 focus:outline-none focus:border-amber-500 cursor-pointer"
+              title="Chọn chế độ lọc: Đúng N tuần còn lại hoặc Tối đa N tuần còn lại"
+            >
+              <option value="exact">Đúng</option>
+              <option value="lte">≤ Tối đa</option>
+            </select>
+
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={1}
+                max={30}
+                placeholder="Số tuần"
+                value={remainingWeeksFilter}
+                onChange={(e) => onRemainingWeeksChange(e.target.value)}
+                className="w-16 px-1.5 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded focus:outline-none focus:border-amber-500 text-slate-800"
+                title="Nhập số tuần giảng dạy còn lại là kết thúc (Ví dụ: 1, 2, 3...)"
+              />
+              <span className="text-xs font-semibold text-slate-600">tuần</span>
+            </div>
+
+            {/* Quick 1, 2, 3, 4 weeks buttons */}
+            <div className="flex items-center gap-1 ml-0.5">
+              {['1', '2', '3', '4'].map((w) => {
+                const isActive = remainingWeeksFilter === w;
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => onRemainingWeeksChange(isActive ? '' : w)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
+                      isActive
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200'
+                    }`}
+                    title={`Lọc các môn còn ${remainingWeeksMode === 'exact' ? 'đúng' : 'tối đa'} ${w} tuần là kết thúc để chuẩn bị kế hoạch tuần kế tiếp`}
+                  >
+                    {w} tuần
+                  </button>
+                );
+              })}
+            </div>
+
+            {hasRemainingWeeksFilter && (
+              <button
+                type="button"
+                onClick={() => onRemainingWeeksChange('')}
+                className="p-0.5 text-amber-700 hover:text-amber-950 hover:bg-amber-200/60 rounded cursor-pointer"
+                title="Xóa lọc số tuần còn lại"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Active filter result badge & Reset all button */}
+        {hasAnyAdvancedFilter && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+              Kết quả lọc: {totalFilteredCoursesCount} môn học
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onSearchChange('');
+                onPositionChange('ALL');
+                onStatusChange('ALL');
+                onMinProgressChange('');
+                onMaxProgressChange('');
+                onRemainingWeeksChange('');
+              }}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 cursor-pointer transition-colors"
+              title="Xóa toàn bộ điều kiện lọc"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Xóa lọc</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Batch selection floating/inline bar with Auto Calculate & Delete */}

@@ -413,3 +413,129 @@ export function computeCourseGanttSchedule(
     cells,
   };
 }
+
+export interface CourseRemainingInfo {
+  totalHours: number;
+  completedHours: number;
+  remainingHours: number;
+  progressPercent: number;
+  remainingWeeks: number; // 0 if completed, otherwise number of teaching weeks left
+  endWeekNumber?: number;
+  lastSessionFormatted?: string;
+}
+
+/**
+ * Calculates a course's teaching progress percentage (%) and remaining weeks until completion.
+ * Does not mutate any course or semester data.
+ */
+export function getCourseRemainingWeeksInfo(
+  course: CourseAssignment,
+  semesterWeeks: SemesterWeek[],
+  holidays: Holiday[]
+): CourseRemainingInfo {
+  const totalHours =
+    Math.round(((course.theoryHours || 0) + (course.practiceHours || 0)) * 100) / 100;
+  const completedHours = Math.min(totalHours, Math.max(0, course.completedHours || 0));
+  const remainingHours = Math.max(0, Math.round((totalHours - completedHours) * 100) / 100);
+  const progressPercent =
+    totalHours > 0 ? Math.min(100, Math.round((completedHours / totalHours) * 100)) : 0;
+
+  if (totalHours <= 0 || remainingHours <= 0) {
+    return {
+      totalHours,
+      completedHours,
+      remainingHours: 0,
+      progressPercent: totalHours > 0 ? 100 : 0,
+      remainingWeeks: 0,
+    };
+  }
+
+  const sessions = calculateAllCourseSessions(course, semesterWeeks, holidays);
+  if (sessions.length > 0) {
+    const uncompletedSessions = sessions.filter((s) => !s.isCompleted);
+    const distinctRemainingWeeks = new Set(uncompletedSessions.map((s) => s.weekIndex)).size;
+    const lastSession = sessions[sessions.length - 1];
+    const endWeekNumber = semesterWeeks[lastSession.weekIndex]?.weekNumber;
+
+    return {
+      totalHours,
+      completedHours,
+      remainingHours,
+      progressPercent,
+      remainingWeeks: Math.max(1, distinctRemainingWeeks),
+      endWeekNumber,
+      lastSessionFormatted: lastSession.dateFormatted,
+    };
+  }
+
+  // Fallback estimation if course has no valid sessions mapped in semesterWeeks
+  const sessionsPerWeek =
+    course.scheduleSlots && course.scheduleSlots.length > 0
+      ? course.scheduleSlots.length
+      : 1;
+  const hoursPerSession = course.hoursPerSession && course.hoursPerSession > 0 ? course.hoursPerSession : 4;
+  const hoursPerWeek = sessionsPerWeek * hoursPerSession;
+  const estimatedWeeks = hoursPerWeek > 0 ? Math.max(1, Math.ceil(remainingHours / hoursPerWeek)) : 1;
+
+  return {
+    totalHours,
+    completedHours,
+    remainingHours,
+    progressPercent,
+    remainingWeeks: estimatedWeeks,
+  };
+}
+
+/**
+ * Evaluates whether a course satisfies the progress percentage range (min% - max%)
+ * and remaining weeks until completion filter.
+ */
+export function doesCourseMatchProgressAndWeeksFilter(
+  course: CourseAssignment,
+  semesterWeeks: SemesterWeek[],
+  holidays: Holiday[],
+  minProgressPercent: string,
+  maxProgressPercent: string,
+  remainingWeeksTarget: string,
+  remainingWeeksMode: 'exact' | 'lte' = 'exact'
+): boolean {
+  const hasMinPct = minProgressPercent.trim() !== '' && !isNaN(Number(minProgressPercent));
+  const hasMaxPct = maxProgressPercent.trim() !== '' && !isNaN(Number(maxProgressPercent));
+  const hasRemWeeks = remainingWeeksTarget.trim() !== '' && !isNaN(Number(remainingWeeksTarget));
+
+  if (!hasMinPct && !hasMaxPct && !hasRemWeeks) {
+    return true;
+  }
+
+  const info = getCourseRemainingWeeksInfo(course, semesterWeeks, holidays);
+
+  if (hasMinPct) {
+    const minVal = Math.max(0, Math.min(100, Number(minProgressPercent)));
+    if (info.progressPercent < minVal) return false;
+  }
+
+  if (hasMaxPct) {
+    const maxVal = Math.max(0, Math.min(100, Number(maxProgressPercent)));
+    if (info.progressPercent > maxVal) return false;
+  }
+
+  if (hasRemWeeks) {
+    const targetWeeks = Math.max(0, Math.floor(Number(remainingWeeksTarget)));
+    if (targetWeeks === 0) {
+      if (info.remainingWeeks !== 0) return false;
+    } else {
+      // When filtering for remaining weeks > 0 (e.g. 1 week, 2 weeks left to prepare next week's plan),
+      // only match courses that are not yet finished (remainingWeeks > 0)
+      if (info.remainingWeeks <= 0) return false;
+      if (remainingWeeksMode === 'exact') {
+        if (info.remainingWeeks !== targetWeeks) return false;
+      } else {
+        if (info.remainingWeeks > targetWeeks) return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+

@@ -4,6 +4,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Calendar,
+  CalendarClock,
   CalendarRange,
   Check,
   ChevronDown,
@@ -21,6 +22,7 @@ import {
   Maximize2,
   Minimize2,
   MoveHorizontal,
+  Percent,
   Printer,
   RotateCcw,
   Search,
@@ -37,7 +39,9 @@ import { AppUiSettings, CourseAssignment, CoursePauseInterval, Holiday, MasterCl
 import {
   computeCourseGanttSchedule,
   CourseGanttSchedule,
+  doesCourseMatchProgressAndWeeksFilter,
   generateSemesterWeeks,
+  getCourseRemainingWeeksInfo,
   SemesterWeek,
   WeekGanttCell,
 } from '../utils/ganttCalculator';
@@ -123,6 +127,14 @@ interface GanttChartProps {
   onPositionChange?: (pos: string) => void;
   selectedStatus?: string;
   onStatusChange?: (status: string) => void;
+  minProgressPercent?: string;
+  onMinProgressChange?: (val: string) => void;
+  maxProgressPercent?: string;
+  onMaxProgressChange?: (val: string) => void;
+  remainingWeeksFilter?: string;
+  onRemainingWeeksChange?: (val: string) => void;
+  remainingWeeksMode?: 'exact' | 'lte';
+  onRemainingWeeksModeChange?: (mode: 'exact' | 'lte') => void;
   isPrintOpen?: boolean;
   onClosePrint?: () => void;
 }
@@ -160,6 +172,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   onPositionChange: parentOnPositionChange,
   selectedStatus: parentSelectedStatus,
   onStatusChange: parentOnStatusChange,
+  minProgressPercent: parentMinProgressPercent,
+  onMinProgressChange: parentOnMinProgressChange,
+  maxProgressPercent: parentMaxProgressPercent,
+  onMaxProgressChange: parentOnMaxProgressChange,
+  remainingWeeksFilter: parentRemainingWeeksFilter,
+  onRemainingWeeksChange: parentOnRemainingWeeksChange,
+  remainingWeeksMode: parentRemainingWeeksMode,
+  onRemainingWeeksModeChange: parentOnRemainingWeeksModeChange,
   isPrintOpen: parentIsPrintOpen,
   onClosePrint: parentOnClosePrint,
 }) => {
@@ -167,6 +187,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const [localSearchTerm, setLocalSearchTerm] = useState('');
   const [localSelectedPosition, setLocalSelectedPosition] = useState('ALL');
   const [localSelectedStatus, setLocalSelectedStatus] = useState('ALL');
+  const [localMinProgress, setLocalMinProgress] = useState('');
+  const [localMaxProgress, setLocalMaxProgress] = useState('');
+  const [localRemainingWeeks, setLocalRemainingWeeks] = useState('');
+  const [localRemainingWeeksMode, setLocalRemainingWeeksMode] = useState<'exact' | 'lte'>('exact');
 
   // Co-teaching modal state
   const [isCoTeachingModalOpen, setIsCoTeachingModalOpen] = useState(false);
@@ -301,6 +325,18 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
   const selectedStatus = parentSelectedStatus !== undefined ? parentSelectedStatus : localSelectedStatus;
   const setSelectedStatus = parentOnStatusChange || setLocalSelectedStatus;
+
+  const minProgressPercent = parentMinProgressPercent !== undefined ? parentMinProgressPercent : localMinProgress;
+  const setMinProgressPercent = parentOnMinProgressChange || setLocalMinProgress;
+
+  const maxProgressPercent = parentMaxProgressPercent !== undefined ? parentMaxProgressPercent : localMaxProgress;
+  const setMaxProgressPercent = parentOnMaxProgressChange || setLocalMaxProgress;
+
+  const remainingWeeksFilter = parentRemainingWeeksFilter !== undefined ? parentRemainingWeeksFilter : localRemainingWeeks;
+  const setRemainingWeeksFilter = parentOnRemainingWeeksChange || setLocalRemainingWeeks;
+
+  const remainingWeeksMode = parentRemainingWeeksMode !== undefined ? parentRemainingWeeksMode : localRemainingWeeksMode;
+  const setRemainingWeeksMode = parentOnRemainingWeeksModeChange || setLocalRemainingWeeksMode;
 
   // Print view modal state
   const [localIsPrintOpen, setLocalIsPrintOpen] = useState(false);
@@ -695,6 +731,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return ['Cơ hữu', 'Thỉnh giảng'];
   }, []);
 
+  const hasCourseLevelExtraFilter =
+    minProgressPercent.trim() !== '' ||
+    maxProgressPercent.trim() !== '' ||
+    remainingWeeksFilter.trim() !== '';
+
   // Filtered teachers and their courses
   const filteredTeachers: Teacher[] = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -707,7 +748,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         return true;
       })
       .map((teacher) => {
-        let courses = teacher.courses || [];
+        let courses = [...(teacher.courses || [])];
 
         if (selectedStatus !== 'ALL') {
           courses = courses.filter((c) => {
@@ -715,6 +756,20 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             const isDone = (c.completedHours || 0) >= tot && tot > 0;
             return selectedStatus === 'Đã hoàn thành' ? isDone : !isDone;
           });
+        }
+
+        if (hasCourseLevelExtraFilter) {
+          courses = courses.filter((c) =>
+            doesCourseMatchProgressAndWeeksFilter(
+              c,
+              semesterWeeks,
+              holidays,
+              minProgressPercent,
+              maxProgressPercent,
+              remainingWeeksFilter,
+              remainingWeeksMode
+            )
+          );
         }
 
         if (term) {
@@ -760,7 +815,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         };
       })
       .filter((teacher) => {
-        if (selectedStatus !== 'ALL') {
+        if (selectedStatus !== 'ALL' || hasCourseLevelExtraFilter) {
           return teacher.courses.length > 0;
         }
         if (searchTerm.trim()) {
@@ -769,7 +824,21 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         }
         return true;
       });
-  }, [semester.teachers, searchTerm, selectedPosition, selectedStatus, itemSortField, itemSortDirection]);
+  }, [
+    semester.teachers,
+    searchTerm,
+    selectedPosition,
+    selectedStatus,
+    hasCourseLevelExtraFilter,
+    semesterWeeks,
+    holidays,
+    minProgressPercent,
+    maxProgressPercent,
+    remainingWeeksFilter,
+    remainingWeeksMode,
+    itemSortField,
+    itemSortDirection,
+  ]);
 
   // Precompute Gantt schedules for all courses (each course uses its own mergeRemainderHours setting)
   const courseSchedulesMap = useMemo(() => {
@@ -956,10 +1025,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   // Filtered family groups according to parent class filter and search
   const filteredFamilyGroups = useMemo(() => {
     if (selectedParentClass === 'ALL') {
-      return classFamilyGroups.filter((f) => f.items.length > 0 || (searchTerm || '').trim() !== '');
+      return classFamilyGroups.filter((f) => f.items.length > 0);
     }
     return classFamilyGroups.filter((f) => f.parentKey === selectedParentClass);
-  }, [classFamilyGroups, selectedParentClass, searchTerm]);
+  }, [classFamilyGroups, selectedParentClass]);
 
   // Sticky offset calculations for STT and Teacher/Class
   const sttStickyLeft = 0;
@@ -1834,6 +1903,202 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             ) : null}
           </button>
         )}
+
+        {/* Row 2 in Gantt Toolbar: Progress % Range Filter & Remaining Weeks Filter */}
+        <div className="w-full pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Progress % Range Filter */}
+            <div
+              className={`flex flex-wrap items-center gap-1.5 rounded-lg px-2.5 py-1 border transition-colors ${
+                minProgressPercent.trim() !== '' || maxProgressPercent.trim() !== ''
+                  ? 'bg-blue-50/90 border-blue-300 text-blue-950 shadow-2xs'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              <Percent
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  minProgressPercent.trim() !== '' || maxProgressPercent.trim() !== ''
+                    ? 'text-blue-600'
+                    : 'text-slate-500'
+                }`}
+              />
+              <span className="text-xs font-bold whitespace-nowrap">Tiến độ (%):</span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="Từ %"
+                  value={minProgressPercent}
+                  onChange={(e) => setMinProgressPercent(e.target.value)}
+                  className="w-13 px-1.5 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-slate-800"
+                  title="Phần trăm số tiết đã dạy tối thiểu (Ví dụ: 80)"
+                />
+                <span className="text-xs text-slate-400 font-bold">–</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="Đến %"
+                  value={maxProgressPercent}
+                  onChange={(e) => setMaxProgressPercent(e.target.value)}
+                  className="w-13 px-1.5 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded focus:outline-none focus:border-blue-500 text-slate-800"
+                  title="Phần trăm số tiết đã dạy tối đa (Ví dụ: 100)"
+                />
+              </div>
+
+              {/* Quick % Presets */}
+              <div className="flex items-center gap-1 ml-0.5">
+                {[
+                  { label: '80-100%', min: '80', max: '100', title: 'Từ 80% đến 100%' },
+                  { label: '80-99%', min: '80', max: '99', title: 'Sắp xong (80% - 99%, chưa kết thúc)' },
+                  { label: '50-80%', min: '50', max: '80', title: 'Từ 50% đến 80%' },
+                  { label: '<50%', min: '0', max: '49', title: 'Dưới 50%' },
+                ].map((preset) => {
+                  const isActive =
+                    minProgressPercent === preset.min && maxProgressPercent === preset.max;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        if (isActive) {
+                          setMinProgressPercent('');
+                          setMaxProgressPercent('');
+                        } else {
+                          setMinProgressPercent(preset.min);
+                          setMaxProgressPercent(preset.max);
+                        }
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
+                        isActive
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200'
+                      }`}
+                      title={preset.title}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(minProgressPercent.trim() !== '' || maxProgressPercent.trim() !== '') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinProgressPercent('');
+                    setMaxProgressPercent('');
+                  }}
+                  className="p-0.5 text-blue-600 hover:text-blue-900 hover:bg-blue-100 rounded cursor-pointer"
+                  title="Xóa lọc % tiến độ"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* 2. Remaining Weeks Filter (Chuẩn bị kế hoạch tuần kế tiếp) */}
+            <div
+              className={`flex flex-wrap items-center gap-1.5 rounded-lg px-2.5 py-1 border transition-colors ${
+                remainingWeeksFilter.trim() !== ''
+                  ? 'bg-amber-50 border-amber-300 text-amber-950 shadow-2xs'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              <CalendarClock
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  remainingWeeksFilter.trim() !== '' ? 'text-amber-600' : 'text-slate-500'
+                }`}
+              />
+              <span className="text-xs font-bold whitespace-nowrap">Sắp kết thúc còn:</span>
+
+              <select
+                value={remainingWeeksMode}
+                onChange={(e) => setRemainingWeeksMode(e.target.value as 'exact' | 'lte')}
+                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-700 focus:outline-none focus:border-amber-500 cursor-pointer"
+                title="Chọn chế độ lọc: Đúng N tuần còn lại hoặc Tối đa N tuần còn lại"
+              >
+                <option value="exact">Đúng</option>
+                <option value="lte">≤ Tối đa</option>
+              </select>
+
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  placeholder="Số tuần"
+                  value={remainingWeeksFilter}
+                  onChange={(e) => setRemainingWeeksFilter(e.target.value)}
+                  className="w-15 px-1.5 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded focus:outline-none focus:border-amber-500 text-slate-800"
+                  title="Nhập số tuần giảng dạy còn lại là kết thúc (Ví dụ: 1, 2, 3...)"
+                />
+                <span className="text-xs font-semibold text-slate-600">tuần</span>
+              </div>
+
+              <div className="flex items-center gap-1 ml-0.5">
+                {['1', '2', '3', '4'].map((w) => {
+                  const isActive = remainingWeeksFilter === w;
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => setRemainingWeeksFilter(isActive ? '' : w)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer border ${
+                        isActive
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200'
+                      }`}
+                      title={`Lọc các môn còn ${remainingWeeksMode === 'exact' ? 'đúng' : 'tối đa'} ${w} tuần là kết thúc để chuẩn bị kế hoạch tuần kế tiếp`}
+                    >
+                      {w} tuần
+                    </button>
+                  );
+                })}
+              </div>
+
+              {remainingWeeksFilter.trim() !== '' && (
+                <button
+                  type="button"
+                  onClick={() => setRemainingWeeksFilter('')}
+                  className="p-0.5 text-amber-700 hover:text-amber-950 hover:bg-amber-200/60 rounded cursor-pointer"
+                  title="Xóa lọc số tuần còn lại"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Active filter count & clear button */}
+          {(hasCourseLevelExtraFilter ||
+            selectedPosition !== 'ALL' ||
+            selectedStatus !== 'ALL' ||
+            searchTerm.trim() !== '') && (
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
+                Đang hiện: {filteredTeachers.reduce((s, t) => s + (t.courses?.length || 0), 0)} môn
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedPosition('ALL');
+                  setSelectedStatus('ALL');
+                  setMinProgressPercent('');
+                  setMaxProgressPercent('');
+                  setRemainingWeeksFilter('');
+                }}
+                className="px-2 py-0.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 cursor-pointer transition-colors"
+                title="Xóa toàn bộ điều kiện lọc"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Xóa lọc</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Fullscreen Header Banner when active */}
@@ -2626,14 +2891,39 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
                                   {/* Progress */}
                                   {colVisibility.progress && (
-                                    <td className="py-2 px-1.5 text-center border-r-2 border-slate-400">
-                                      <span
-                                        className={`font-bold text-xs ${
-                                          isDone ? 'text-emerald-700 font-extrabold' : 'text-blue-700'
-                                        }`}
-                                      >
-                                        {completed}/{totalHours}h
-                                      </span>
+                                    <td className="py-1.5 px-1.5 text-center border-r-2 border-slate-400">
+                                      {(() => {
+                                        const remInfo = getCourseRemainingWeeksInfo(
+                                          course,
+                                          semesterWeeks,
+                                          holidays
+                                        );
+                                        return (
+                                          <div className="flex flex-col items-center leading-tight">
+                                            <span
+                                              className={`font-bold text-xs ${
+                                                isDone ? 'text-emerald-700 font-extrabold' : 'text-blue-700'
+                                              }`}
+                                            >
+                                              {completed}/{totalHours}h ({remInfo.progressPercent}%)
+                                            </span>
+                                            {!isDone && remInfo.remainingWeeks > 0 && (
+                                              <span
+                                                className={`mt-0.5 px-1 py-0.1 rounded text-[9px] font-bold ${
+                                                  remInfo.remainingWeeks <= 2
+                                                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                                    : 'bg-slate-100 text-slate-600'
+                                                }`}
+                                                title={`Còn ${remInfo.remainingWeeks} tuần giảng dạy là kết thúc${
+                                                  remInfo.endWeekNumber ? ` (KT: Tuần ${remInfo.endWeekNumber})` : ''
+                                                }`}
+                                              >
+                                                Còn {remInfo.remainingWeeks}T
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </td>
                                   )}
 
@@ -2892,14 +3182,39 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 
                         {/* Column 9: Completed / % */}
                         {colVisibility.progress && (
-                          <td className="py-2 px-1.5 text-center border-r-2 border-slate-400">
-                            <span
-                              className={`font-bold text-[11px] ${
-                                isDone ? 'text-emerald-700 font-extrabold' : 'text-blue-700'
-                              }`}
-                            >
-                              {completed}/{totalHours}h
-                            </span>
+                          <td className="py-1.5 px-1.5 text-center border-r-2 border-slate-400">
+                            {(() => {
+                              const remInfo = getCourseRemainingWeeksInfo(
+                                course,
+                                semesterWeeks,
+                                holidays
+                              );
+                              return (
+                                <div className="flex flex-col items-center leading-tight">
+                                  <span
+                                    className={`font-bold text-[11px] ${
+                                      isDone ? 'text-emerald-700 font-extrabold' : 'text-blue-700'
+                                    }`}
+                                  >
+                                    {completed}/{totalHours}h ({remInfo.progressPercent}%)
+                                  </span>
+                                  {!isDone && remInfo.remainingWeeks > 0 && (
+                                    <span
+                                      className={`mt-0.5 px-1 py-0.1 rounded text-[9px] font-bold ${
+                                        remInfo.remainingWeeks <= 2
+                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                          : 'bg-slate-100 text-slate-600'
+                                      }`}
+                                      title={`Còn ${remInfo.remainingWeeks} tuần giảng dạy là kết thúc${
+                                        remInfo.endWeekNumber ? ` (KT: Tuần ${remInfo.endWeekNumber})` : ''
+                                      }`}
+                                    >
+                                      Còn {remInfo.remainingWeeks}T
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                         )}
 

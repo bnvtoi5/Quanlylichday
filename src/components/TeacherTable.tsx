@@ -14,12 +14,14 @@ import {
 } from 'lucide-react';
 import { AppUiSettings, CourseAssignment, CustomColumn, Holiday, Teacher, TeachingStatus } from '../types';
 import { calculateTeachingProgress } from '../utils/vietnamTime';
+import { getCourseRemainingWeeksInfo, SemesterWeek } from '../utils/ganttCalculator';
 import { ConfirmModal } from './ConfirmModal';
 
 interface TeacherTableProps {
   teachers: Teacher[];
   customColumns: CustomColumn[];
   holidays?: Holiday[];
+  semesterWeeks?: SemesterWeek[];
   selectedCourseIds: string[];
   isAllFilteredSelected?: boolean;
   uiSettings?: AppUiSettings;
@@ -59,6 +61,7 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
   teachers,
   customColumns,
   holidays = [],
+  semesterWeeks = [],
   selectedCourseIds,
   isAllFilteredSelected = false,
   uiSettings,
@@ -830,15 +833,42 @@ export const TeacherTable: React.FC<TeacherTableProps> = ({
                             <span>Đã hoàn thành</span>
                           </div>
                         ) : (
-                          <div className="inline-flex flex-col items-center">
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-                              <span>Đang dạy</span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 mt-0.5">
-                              (Còn {Math.round((totalCourseHours - currentDone) * 100) / 100} tiết)
-                            </span>
-                          </div>
+                          (() => {
+                            const remInfo = getCourseRemainingWeeksInfo(
+                              course,
+                              semesterWeeks,
+                              holidays
+                            );
+                            const isSoon = remInfo.remainingWeeks > 0 && remInfo.remainingWeeks <= 2;
+                            return (
+                              <div className="inline-flex flex-col items-center gap-0.5">
+                                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                  <span>Đang dạy</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 font-medium">
+                                  Còn {remInfo.remainingHours} tiết
+                                </span>
+                                {remInfo.remainingWeeks > 0 && (
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.2 rounded text-[10px] font-bold border ${
+                                      isSoon
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                                    }`}
+                                    title={
+                                      remInfo.endWeekNumber
+                                        ? `Dự kiến kết thúc vào Tuần ${remInfo.endWeekNumber} (${remInfo.lastSessionFormatted || ''})`
+                                        : `Còn ${remInfo.remainingWeeks} tuần giảng dạy là kết thúc`
+                                    }
+                                  >
+                                    ⏳ Còn {remInfo.remainingWeeks} tuần
+                                    {remInfo.endWeekNumber ? ` (KT: T${remInfo.endWeekNumber})` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()
                         )}
                       </td>
 

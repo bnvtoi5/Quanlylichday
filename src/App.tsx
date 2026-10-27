@@ -31,6 +31,7 @@ import {
 import { exportTeachingReportToExcel } from './utils/excelExport';
 import { exportGanttPdfDirectly } from './utils/ganttPdfExport';
 import { calculateTeachingProgress, getVietnam6amCycleKey } from './utils/vietnamTime';
+import { doesCourseMatchProgressAndWeeksFilter, generateSemesterWeeks } from './utils/ganttCalculator';
 import { autoDetectAndAddParentClasses, ensureChildClassName } from './utils/classGrouping';
 
 import { Navbar } from './components/Navbar';
@@ -325,6 +326,10 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPosition, setSelectedPosition] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [minProgressPercent, setMinProgressPercent] = useState('');
+  const [maxProgressPercent, setMaxProgressPercent] = useState('');
+  const [remainingWeeksFilter, setRemainingWeeksFilter] = useState('');
+  const [remainingWeeksMode, setRemainingWeeksMode] = useState<'exact' | 'lte'>('exact');
 
   // Selected courses for bulk actions
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
@@ -372,6 +377,20 @@ export default function App() {
     return ['Cơ hữu', 'Thỉnh giảng'];
   }, []);
 
+  // Precompute semester weeks for remaining-weeks calculation & filters
+  const activeSemesterWeeks = useMemo(() => {
+    return generateSemesterWeeks(
+      activeSemester.startDate,
+      activeSemester.endDate,
+      activeSemester.startWeekNumber || 1
+    );
+  }, [activeSemester.startDate, activeSemester.endDate, activeSemester.startWeekNumber]);
+
+  const hasCourseLevelExtraFilter =
+    minProgressPercent.trim() !== '' ||
+    maxProgressPercent.trim() !== '' ||
+    remainingWeeksFilter.trim() !== '';
+
   // Filtered teachers & courses calculation
   const filteredTeachers: Teacher[] = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -392,6 +411,20 @@ export default function App() {
             const isDone = (c.completedHours || 0) >= tot && tot > 0;
             return selectedStatus === 'Đã hoàn thành' ? isDone : !isDone;
           });
+        }
+
+        if (hasCourseLevelExtraFilter) {
+          courses = courses.filter((c) =>
+            doesCourseMatchProgressAndWeeksFilter(
+              c,
+              activeSemesterWeeks,
+              appState.holidays || [],
+              minProgressPercent,
+              maxProgressPercent,
+              remainingWeeksFilter,
+              remainingWeeksMode
+            )
+          );
         }
 
         if (term) {
@@ -416,7 +449,7 @@ export default function App() {
         };
       })
       .filter((teacher) => {
-        if (selectedStatus !== 'ALL') {
+        if (selectedStatus !== 'ALL' || hasCourseLevelExtraFilter) {
           return teacher.courses.length > 0;
         }
         if (searchTerm.trim()) {
@@ -425,7 +458,19 @@ export default function App() {
         }
         return true;
       });
-  }, [activeSemester.teachers, searchTerm, selectedPosition, selectedStatus]);
+  }, [
+    activeSemester.teachers,
+    searchTerm,
+    selectedPosition,
+    selectedStatus,
+    hasCourseLevelExtraFilter,
+    activeSemesterWeeks,
+    appState.holidays,
+    minProgressPercent,
+    maxProgressPercent,
+    remainingWeeksFilter,
+    remainingWeeksMode,
+  ]);
 
   // Helper to update active semester in state
   const updateCurrentSemester = (updater: (prevSem: Semester) => Semester) => {
@@ -1938,6 +1983,14 @@ export default function App() {
             onPositionChange={setSelectedPosition}
             selectedStatus={selectedStatus}
             onStatusChange={setSelectedStatus}
+            minProgressPercent={minProgressPercent}
+            onMinProgressChange={setMinProgressPercent}
+            maxProgressPercent={maxProgressPercent}
+            onMaxProgressChange={setMaxProgressPercent}
+            remainingWeeksFilter={remainingWeeksFilter}
+            onRemainingWeeksChange={setRemainingWeeksFilter}
+            remainingWeeksMode={remainingWeeksMode}
+            onRemainingWeeksModeChange={setRemainingWeeksMode}
             isPrintOpen={isGanttPrintOpen}
             onClosePrint={() => setIsGanttPrintOpen(false)}
             onEditCourse={(teacher, course) => {
@@ -1989,6 +2042,14 @@ export default function App() {
               availablePositions={availablePositions}
               selectedStatus={selectedStatus}
               onStatusChange={setSelectedStatus}
+              minProgressPercent={minProgressPercent}
+              onMinProgressChange={setMinProgressPercent}
+              maxProgressPercent={maxProgressPercent}
+              onMaxProgressChange={setMaxProgressPercent}
+              remainingWeeksFilter={remainingWeeksFilter}
+              onRemainingWeeksChange={setRemainingWeeksFilter}
+              remainingWeeksMode={remainingWeeksMode}
+              onRemainingWeeksModeChange={setRemainingWeeksMode}
               selectedCourseIds={selectedCourseIds}
               totalFilteredCoursesCount={allFilteredCourseIds.length}
               isAllFilteredSelected={isAllFilteredSelected}
@@ -2007,6 +2068,7 @@ export default function App() {
               teachers={filteredTeachers}
               customColumns={activeSemester.customColumns || []}
               holidays={appState.holidays || []}
+              semesterWeeks={activeSemesterWeeks}
               selectedCourseIds={selectedCourseIds}
               isAllFilteredSelected={isAllFilteredSelected}
               uiSettings={appState.uiSettings}
